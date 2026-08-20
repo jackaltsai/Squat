@@ -28,4 +28,7 @@ object Config {
 
     /** 判定「站立穩定」的髖部位移容許值（正規化後），用於基準自適應。 */
     const val BASELINE_STABLE_RATIO = 0.02f
+
+    /** 需連續穩定達此幀數才真正校正基準，避免緩慢下蹲被誤判成站立微晃而讓基準一路跟著往下追。 */
+    const val BASELINE_ADAPT_MIN_STABLE_FRAMES = 10
 }

@@ -25,6 +25,7 @@ class SquatStateMachine {
     private var prevHipY: Float? = null
     private var risingFrameCount = 0
     private var standStableFrameCount = 0
+    private var baselineStillStreak = 0
 
     /**
      * 餵入一幀「已通過品質過濾與 EMA 平滑」的關鍵點，回傳更新後的狀態。
@@ -94,10 +95,16 @@ class SquatStateMachine {
         if (currentBaseline == null || currentScale == null) {
             standBaselineY = hipY
             normalizeScale = ankleY - hipY
+            baselineStillStreak = 0
             return
         }
         val delta = abs(hipY - currentBaseline)
-        if (currentScale > 0f && delta / currentScale < Config.BASELINE_STABLE_RATIO) {
+        val isStill = currentScale > 0f && delta / currentScale < Config.BASELINE_STABLE_RATIO
+        baselineStillStreak = if (isStill) baselineStillStreak + 1 else 0
+
+        // 連續穩定達門檻才真正校正基準，避免緩慢下蹲時每一幀位移都很小、被誤判成站立微晃，
+        // 導致基準一路跟著髖部往下追、depthRatio 永遠追不上 DOWN_ENTER_RATIO。
+        if (baselineStillStreak >= Config.BASELINE_ADAPT_MIN_STABLE_FRAMES) {
             val a = Config.BASELINE_ADAPT_ALPHA
             standBaselineY = a * hipY + (1 - a) * currentBaseline
             normalizeScale = a * (ankleY - hipY) + (1 - a) * currentScale
