@@ -3,7 +3,6 @@ package com.heartchen.squat.squat
 import com.heartchen.squat.config.Config
 import com.heartchen.squat.pose.KeyPoint
 import com.heartchen.squat.pose.KeyPointType
-import kotlin.math.abs
 
 /**
  * 深蹲計次狀態機：STAND → DOWN → BOTTOM → UP → STAND（計次 +1）。
@@ -11,21 +10,27 @@ import kotlin.math.abs
  * 最低點（BOTTOM）判定依據「髖部下降轉上升的轉折點 + 連續幀確認」，
  * 而非單一高度閾值，避免瞬間雜訊誤判（見 CLAUDE.md 第 7 節）。
  *
- * 站立基準高度與「髖-踝」正規化尺度在 STAND 狀態下持續緩慢自適應校正，
- * 尚未串接 M3 的正式站姿校正流程，僅供 M2 計次邏輯使用。
+ * [standBaselineY] / [normalizeScale]（髖-踝垂直距離）來自 M3 的正式校正流程
+ * （見 `CalibrationPhase`），此後在整個訓練過程中固定不變，不再像 M2 那樣持續自適應，
+ * 確保後續深度達成率 p = Dnow / Duser 的計算基準前後一致。
  */
-class SquatStateMachine {
+class SquatStateMachine(
+    private val standBaselineY: Float,
+    private val normalizeScale: Float
+) {
     var state: SquatState = SquatState.STAND
         private set
     var repCount: Int = 0
         private set
 
-    private var standBaselineY: Float? = null
-    private var normalizeScale: Float? = null
+    /** 最近一次 BOTTOM 觸發時的深度達成比例（相對站立基準、以髖-踝距離正規化），BOTTOM 觸發後才有值。 */
+    var lastBottomDepthRatio: Float? = null
+        private set
+
     private var prevHipY: Float? = null
     private var risingFrameCount = 0
     private var standStableFrameCount = 0
-    private var baselineStillStreak = 0
+    private var peakHipYInDown: Float? = null
 
     /**
      * 餵入一幀「已通過品質過濾與 EMA 平滑」的關鍵點，回傳更新後的狀態。
@@ -33,41 +38,33 @@ class SquatStateMachine {
      */
     fun update(keyPointsByType: Map<KeyPointType, KeyPoint>): SquatState {
         val hipY = averageY(keyPointsByType, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP)
-        val ankleY = averageY(keyPointsByType, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
-        if (hipY == null || ankleY == null) return state
-
-        if (state == SquatState.STAND) {
-            adaptBaseline(hipY, ankleY)
-        }
-
-        val baseline = standBaselineY
-        val scale = normalizeScale
-        if (baseline == null || scale == null || scale <= 0f) {
-            prevHipY = hipY
-            return state
-        }
+        if (hipY == null || normalizeScale <= 0f) return state
 
         // depthRatio 正值代表髖部低於站立基準（往下蹲），以髖-踝距離正規化避免受拍攝距離影響。
-        val depthRatio = (hipY - baseline) / scale
+        val depthRatio = (hipY - standBaselineY) / normalizeScale
 
         when (state) {
             SquatState.STAND -> {
                 if (depthRatio > Config.DOWN_ENTER_RATIO) {
                     state = SquatState.DOWN
                     risingFrameCount = 0
+                    peakHipYInDown = hipY
                 }
             }
 
             SquatState.DOWN -> {
+                peakHipYInDown = maxOf(peakHipYInDown ?: hipY, hipY)
                 val prev = prevHipY
                 risingFrameCount = if (prev != null && hipY < prev) risingFrameCount + 1 else 0
                 if (risingFrameCount >= Config.TURN_CONFIRM_FRAMES) {
+                    val peakHipY = peakHipYInDown ?: hipY
+                    lastBottomDepthRatio = (peakHipY - standBaselineY) / normalizeScale
                     state = SquatState.BOTTOM
                 }
             }
 
             SquatState.BOTTOM -> {
-                // BOTTOM 僅代表最低點判定瞬間，姿勢判定（M4）掛在此處觸發一次後立即進入 UP。
+                // BOTTOM 僅代表最低點判定瞬間，姿勢判定（M4）與深度回饋（M3）掛在此處觸發一次後立即進入 UP。
                 state = SquatState.UP
                 standStableFrameCount = 0
             }
@@ -87,28 +84,6 @@ class SquatStateMachine {
 
         prevHipY = hipY
         return state
-    }
-
-    private fun adaptBaseline(hipY: Float, ankleY: Float) {
-        val currentBaseline = standBaselineY
-        val currentScale = normalizeScale
-        if (currentBaseline == null || currentScale == null) {
-            standBaselineY = hipY
-            normalizeScale = ankleY - hipY
-            baselineStillStreak = 0
-            return
-        }
-        val delta = abs(hipY - currentBaseline)
-        val isStill = currentScale > 0f && delta / currentScale < Config.BASELINE_STABLE_RATIO
-        baselineStillStreak = if (isStill) baselineStillStreak + 1 else 0
-
-        // 連續穩定達門檻才真正校正基準，避免緩慢下蹲時每一幀位移都很小、被誤判成站立微晃，
-        // 導致基準一路跟著髖部往下追、depthRatio 永遠追不上 DOWN_ENTER_RATIO。
-        if (baselineStillStreak >= Config.BASELINE_ADAPT_MIN_STABLE_FRAMES) {
-            val a = Config.BASELINE_ADAPT_ALPHA
-            standBaselineY = a * hipY + (1 - a) * currentBaseline
-            normalizeScale = a * (ankleY - hipY) + (1 - a) * currentScale
-        }
     }
 
     private fun averageY(
