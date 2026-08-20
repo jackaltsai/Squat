@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.heartchen.squat.config.Config
 import java.util.Locale
 
 private val displayOrder = listOf(
@@ -38,7 +39,7 @@ fun PoseConfidenceList(poseFrame: PoseFrame?, modifier: Modifier = Modifier) {
             val confidence = pointsByType[type]?.inFrameLikelihood
             val color = when {
                 confidence == null -> Color.Gray
-                confidence >= CONFIDENCE_WARNING_THRESHOLD -> Color(0xFF00E676)
+                confidence >= Config.CONFIDENCE_THRESHOLD -> Color(0xFF00E676)
                 else -> Color(0xFFFF1744)
             }
             Text(

@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.IntSize
+import com.heartchen.squat.config.Config
 import kotlin.math.min
 
 private val skeletonConnections = listOf(
@@ -59,7 +60,7 @@ fun PoseOverlay(
 
         poseFrame.keyPoints.forEach { point ->
             val screenPos = toScreen(point)
-            val color = if (point.inFrameLikelihood >= CONFIDENCE_WARNING_THRESHOLD) {
+            val color = if (point.inFrameLikelihood >= Config.CONFIDENCE_THRESHOLD) {
                 Color(0xFF00E676)
             } else {
                 Color(0xFFFF1744)
