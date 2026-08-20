@@ -8,7 +8,6 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +41,9 @@ private const val TAG = "PoseDetectionScreen"
 /**
  * M1 Demo 畫面：CameraX 即時預覽 + ML Kit 骨架疊圖，
  * 尚不包含品質過濾、EMA 平滑與狀態機邏輯（留待 M2）。
+ *
+ * 固定使用後鏡頭：前鏡頭在「手機立於前方、全身入鏡深蹲」的情境下角度不好抓，
+ * 不提供切換。
  */
 @OptIn(ExperimentalGetImage::class)
 @Composable
@@ -50,7 +51,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var poseFrame by remember { mutableStateOf<PoseFrame?>(null) }
     var previewViewSize by remember { mutableStateOf(IntSize.Zero) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
@@ -60,15 +60,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         onDispose { cameraExecutor.shutdown() }
     }
 
-    DisposableEffect(lensFacing, previewView) {
+    DisposableEffect(previewView) {
         val pv = previewView
         if (pv == null) {
             return@DisposableEffect onDispose {}
         }
 
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
-        val analyzer = PoseAnalyzer(isFrontCamera = isFrontCamera) { frame ->
+        val analyzer = PoseAnalyzer(isFrontCamera = false) { frame ->
             poseFrame = frame
         }
 
@@ -84,14 +83,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 .build()
                 .also { it.setAnalyzer(cameraExecutor, analyzer) }
 
-            val cameraSelector = CameraSelector.Builder()
-                .requireLensFacing(lensFacing)
-                .build()
-
             try {
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
-                    cameraSelector,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     imageAnalysis
                 )
@@ -140,24 +135,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 .align(Alignment.TopStart)
                 .padding(16.dp)
                 .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.bodyMedium
-        )
-
-        Text(
-            text = "切換鏡頭",
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                .clickable {
-                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                        CameraSelector.LENS_FACING_FRONT
-                    } else {
-                        CameraSelector.LENS_FACING_BACK
-                    }
-                }
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             style = MaterialTheme.typography.bodyMedium
         )
