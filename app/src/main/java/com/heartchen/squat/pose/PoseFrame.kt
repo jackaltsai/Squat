@@ -1,5 +1,8 @@
 package com.heartchen.squat.pose
 
+/** 信心值低於此門檻時視為不穩定（僅供 M1 肉眼判斷抓取穩定度使用，非狀態機門檻）。 */
+const val CONFIDENCE_WARNING_THRESHOLD = 0.6f
+
 /** 單一關鍵點的偵測結果，座標為「已依裝置方向校正後」的影像座標系。 */
 data class KeyPoint(
     val type: KeyPointType,

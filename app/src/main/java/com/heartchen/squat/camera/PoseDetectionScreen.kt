@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.heartchen.squat.pose.PoseAnalyzer
+import com.heartchen.squat.pose.PoseConfidenceList
 import com.heartchen.squat.pose.PoseFrame
 import com.heartchen.squat.pose.PoseOverlay
 import java.util.concurrent.Executors
@@ -159,6 +160,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 }
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             style = MaterialTheme.typography.bodyMedium
+        )
+
+        PoseConfidenceList(
+            poseFrame = currentFrame,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
         )
     }
 }

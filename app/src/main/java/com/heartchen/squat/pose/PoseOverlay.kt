@@ -2,18 +2,13 @@ package com.heartchen.squat.pose
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.IntSize
-import android.graphics.Paint
 import kotlin.math.min
-
-/** 信心值低於此門檻時，關鍵點以紅色標示（僅供 M1 肉眼判斷穩定度使用，非狀態機門檻）。 */
-private const val CONFIDENCE_WARNING_THRESHOLD = 0.6f
 
 private val skeletonConnections = listOf(
     KeyPointType.LEFT_HIP to KeyPointType.RIGHT_HIP,
@@ -24,8 +19,8 @@ private val skeletonConnections = listOf(
 )
 
 /**
- * 將 [poseFrame] 的髖/膝/踝關鍵點與骨架連線疊圖在 [viewSize] 大小的畫面上，
- * 並標示各點的信心值，供 M1 肉眼判斷抓取穩定度。
+ * 將 [poseFrame] 的髖/膝/踝關鍵點與骨架連線疊圖在 [viewSize] 大小的畫面上。
+ * 各點信心值的數字改由 [PoseConfidenceList] 集中列表顯示，這裡只畫圖形。
  */
 @Composable
 fun PoseOverlay(
@@ -36,14 +31,6 @@ fun PoseOverlay(
     if (viewSize.width == 0 || viewSize.height == 0) return
 
     val pointsByType = poseFrame.keyPoints.associateBy { it.type }
-    val textPaint = remember {
-        Paint().apply {
-            color = android.graphics.Color.WHITE
-            textSize = 32f
-            isAntiAlias = true
-            setShadowLayer(4f, 0f, 0f, android.graphics.Color.BLACK)
-        }
-    }
 
     Canvas(modifier = modifier) {
         val scale = min(
@@ -66,7 +53,7 @@ fun PoseOverlay(
                 start = toScreen(from),
                 end = toScreen(to),
                 strokeWidth = 6f,
-                cap = androidx.compose.ui.graphics.StrokeCap.Round
+                cap = StrokeCap.Round
             )
         }
 
@@ -83,12 +70,6 @@ fun PoseOverlay(
                 radius = 12f,
                 center = screenPos,
                 style = Stroke(width = 2f)
-            )
-            drawContext.canvas.nativeCanvas.drawText(
-                "${point.type.label} ${"%.2f".format(point.inFrameLikelihood)}",
-                screenPos.x + 16f,
-                screenPos.y,
-                textPaint
             )
         }
     }
