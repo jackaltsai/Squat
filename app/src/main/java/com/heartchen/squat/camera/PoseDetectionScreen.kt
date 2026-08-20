@@ -11,7 +11,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,12 +40,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.heartchen.squat.config.Config
 import com.heartchen.squat.pose.EmaSmoother
+import com.heartchen.squat.pose.FramingIssue
 import com.heartchen.squat.pose.KeyPoint
 import com.heartchen.squat.pose.KeyPointType
 import com.heartchen.squat.pose.PoseAnalyzer
 import com.heartchen.squat.pose.PoseConfidenceList
 import com.heartchen.squat.pose.PoseFrame
 import com.heartchen.squat.pose.PoseOverlay
+import com.heartchen.squat.pose.evaluateFraming
 import com.heartchen.squat.pose.passesQualityCheck
 import com.heartchen.squat.squat.SquatState
 import com.heartchen.squat.squat.SquatStateMachine
@@ -201,17 +205,36 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium
         )
 
-        Text(
-            text = "${squatState.name}　次數 $repCount",
-            color = Color.White,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 20.dp, vertical = 10.dp)
-        )
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "${squatState.name}　次數 $repCount",
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            )
+
+            val framingIssue = evaluateFraming(currentFrame)
+            if (framingIssue != FramingIssue.OK) {
+                Text(
+                    text = framingIssue.message,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(Color(0xFFFF6D00).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
 
         PoseConfidenceList(
             poseFrame = currentFrame,

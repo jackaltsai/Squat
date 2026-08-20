@@ -31,4 +31,16 @@ object Config {
 
     /** 需連續穩定達此幀數才真正校正基準，避免緩慢下蹲被誤判成站立微晃而讓基準一路跟著往下追。 */
     const val BASELINE_ADAPT_MIN_STABLE_FRAMES = 10
+
+    /** 框位引導：髖-踝垂直距離佔畫面高度比例，低於此值視為拍攝距離太遠。 */
+    const val FRAMING_TOO_FAR_RATIO = 0.20f
+
+    /** 框位引導：髖-踝垂直距離佔畫面高度比例，高於此值視為拍攝距離太近。 */
+    const val FRAMING_TOO_CLOSE_RATIO = 0.60f
+
+    /** 框位引導：腳踝 Y 座標超過畫面高度此比例，視為腳踝可能快被裁到畫面外，需請使用者調整。 */
+    const val FRAMING_ANKLE_NEAR_EDGE_RATIO = 0.97f
+
+    /** 框位引導：髖部 Y 座標低於畫面高度此比例，視為上半身可能被裁掉，需請使用者調整。 */
+    const val FRAMING_HIP_NEAR_TOP_RATIO = 0.08f
 }
