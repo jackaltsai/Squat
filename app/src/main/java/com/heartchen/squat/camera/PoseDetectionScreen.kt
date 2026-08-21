@@ -2,6 +2,7 @@ package com.heartchen.squat.camera
 
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -58,6 +59,7 @@ import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
 import com.heartchen.squat.squat.evaluateDepthFeedback
 import kotlinx.coroutines.delay
+import java.util.Locale
 import java.util.concurrent.Executors
 
 private const val TAG = "PoseDetectionScreen"
@@ -107,14 +109,32 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         onDispose { toneGenerator.release() }
     }
 
+    // M4：語音提示，BOTTOM 觸發的深度回饋（綠/黃/紅）同步用語音念出訊息。
+    val textToSpeech = remember { mutableStateOf<TextToSpeech?>(null) }
+    DisposableEffect(Unit) {
+        lateinit var tts: TextToSpeech
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts.language = Locale.TAIWAN
+            }
+        }
+        textToSpeech.value = tts
+        onDispose {
+            tts.stop()
+            tts.shutdown()
+        }
+    }
+
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     DisposableEffect(Unit) {
         onDispose { cameraExecutor.shutdown() }
     }
 
-    // BOTTOM 觸發的顏色回饋只維持短暫時間，避免一直卡在畫面上。
+    // BOTTOM 觸發的顏色回饋只維持短暫時間，避免一直卡在畫面上；同步用語音念出訊息。
     LaunchedEffect(depthFeedback) {
-        if (depthFeedback != null) {
+        val feedback = depthFeedback
+        if (feedback != null) {
+            textToSpeech.value?.speak(feedback.message, TextToSpeech.QUEUE_FLUSH, null, null)
             delay(2000)
             depthFeedback = null
         }
@@ -311,7 +331,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         )
                     }
                     Text(
-                        text = "${squatState.name}　次數 $repCount",
+                        text = "${squatState.label}　次數 $repCount",
                         color = Color.White,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
@@ -323,7 +343,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 
                 FlowStep.SQUAT_CALIBRATION -> {
                     Text(
-                        text = "基準深蹲校正 ${calibrationSquatState.name}　${calibrationDepths.size}/${Config.CALIBRATION_SQUAT_REPS}",
+                        text = "基準深蹲校正 ${calibrationSquatState.label}　${calibrationDepths.size}/${Config.CALIBRATION_SQUAT_REPS}",
                         color = Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
