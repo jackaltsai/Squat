@@ -43,4 +43,7 @@ object Config {
 
     /** M4 膝內夾判定：（踝距 - 膝距）除以髖寬，超過此比例視為膝蓋內夾，需後續用驗證集調參。 */
     const val KNEE_VALGUS_RATIO_THRESHOLD = 0.15f
+
+    /** M4 膝內夾判定：髖寬須至少達腿長的此比例，太小（如側身）視為角度不可靠、不判定。 */
+    const val KNEE_VALGUS_MIN_HIP_WIDTH_TO_LEG_RATIO = 0.2f
 }

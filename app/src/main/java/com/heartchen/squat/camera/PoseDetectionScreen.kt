@@ -62,6 +62,7 @@ import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
 import com.heartchen.squat.squat.detectKneeValgus
 import com.heartchen.squat.squat.evaluateDepthFeedback
+import com.heartchen.squat.squat.kneeValgusRatio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -251,6 +252,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val dUser = duser
                         val kneeValgus = detectKneeValgus(smoothedByType)
                         kneeValgusFlag = kneeValgus == true
+                        Log.d(TAG, "kneeValgusRatio=${kneeValgusRatio(smoothedByType)} kneeValgus=$kneeValgus")
                         if (dNow != null && mode != null && dUser != null && dUser > 0f) {
                             val p = dNow / dUser
                             val feedback = evaluateDepthFeedback(p, mode)
