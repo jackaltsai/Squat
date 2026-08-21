@@ -113,6 +113,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var pendingRecord by remember { mutableStateOf<SquatRepRecord?>(null) }
     var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
+    // 六個關鍵點疊圖/信心值列表只是 M1 除錯用，受測者訓練時預設不顯示，避免分散注意力。
+    var debugMode by remember { mutableStateOf(false) }
 
     val database = remember { SquatDatabase.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
@@ -162,6 +164,16 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             delay(2000)
             kneeValgusFlag = false
         }
+    }
+
+    // 受測者可能離鏡頭較遠看不清楚文字，流程轉換（進入站姿校正/深蹲校正）也用語音提示一次。
+    LaunchedEffect(flowStep) {
+        val message = when (flowStep) {
+            FlowStep.STAND_HOLD -> "請站直不動，準備校正站姿基準"
+            FlowStep.SQUAT_CALIBRATION -> "請完成兩次深蹲，校正基準深度"
+            else -> null
+        }
+        message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
     }
 
     DisposableEffect(lensFacing, previewView) {
@@ -254,6 +266,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     }
                     // 計次在 UP → STAND 那一刻才 +1，此時才算這一下真正完成，寫入該次紀錄。
                     if (sm.repCount > previousRepCount) {
+                        textToSpeech.value?.speak(sm.repCount.toString(), TextToSpeech.QUEUE_ADD, null, null)
                         pendingRecord?.let { record ->
                             sessionRecords = sessionRecords + record
                             coroutineScope.launch(Dispatchers.IO) {
@@ -315,29 +328,33 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 .onSizeChanged { previewViewSize = it }
         )
 
-        poseFrame?.let { frame ->
-            PoseOverlay(
-                poseFrame = frame,
-                viewSize = previewViewSize,
-                modifier = Modifier.fillMaxSize()
-            )
+        if (debugMode) {
+            poseFrame?.let { frame ->
+                PoseOverlay(
+                    poseFrame = frame,
+                    viewSize = previewViewSize,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         val currentFrame = poseFrame
-        Text(
-            text = if (currentFrame == null) {
-                "偵測不到關鍵點"
-            } else {
-                "已偵測 ${currentFrame.keyPoints.size}/6 個關鍵點"
-            },
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.bodyMedium
-        )
+        if (debugMode) {
+            Text(
+                text = if (currentFrame == null) {
+                    "偵測不到關鍵點"
+                } else {
+                    "已偵測 ${currentFrame.keyPoints.size}/6 個關鍵點"
+                },
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -372,6 +389,15 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+            Text(
+                text = if (debugMode) "除錯模式：開" else "除錯模式：關",
+                color = Color.White,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .clickable { debugMode = !debugMode }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
 
         Column(
@@ -431,6 +457,12 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
 
             val framingIssue = evaluateFraming(currentFrame)
+            // framingIssue 這個值只有在真的改變時才會觸發，不會每幀都重複念。
+            LaunchedEffect(framingIssue) {
+                if (framingIssue != FramingIssue.OK) {
+                    textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
+                }
+            }
             if (framingIssue != FramingIssue.OK) {
                 Text(
                     text = framingIssue.message,
@@ -444,12 +476,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        PoseConfidenceList(
-            poseFrame = currentFrame,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp)
-        )
+        if (debugMode) {
+            PoseConfidenceList(
+                poseFrame = currentFrame,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+            )
+        }
 
         when (flowStep) {
             FlowStep.SELECT_MODE -> ModeSelectOverlay { mode ->
