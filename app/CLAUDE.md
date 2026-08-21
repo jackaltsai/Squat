@@ -29,13 +29,13 @@ UI: Jetpack Compose
 **目標**：確認能穩定即時抓取髖、膝、踝關鍵點，並疊圖顯示在畫面上。
 
 ### 任務清單
-- [ ] 建立 Android Studio 專案（Empty Compose Activity）
-- [ ] 設定 `build.gradle` 依賴（CameraX、ML Kit Pose Detection）
-- [ ] 設定 `AndroidManifest.xml` 相機權限（`CAMERA`）並處理 runtime 權限請求
-- [ ] 實作 CameraX `PreviewView` + `ImageAnalysis` use case
-- [ ] 串接 ML Kit `PoseDetector`（STREAM_MODE），取得 33 個關鍵點
-- [ ] 用 Compose `Canvas` 疊圖畫出左右髖、膝、踝三個關鍵點，並顯示其 `inFrameLikelihood` 信心值
-- [ ] 手機直立、全身入鏡情境下實測，確認前鏡頭/後鏡頭、直向/橫向畫面座標轉換正確
+- [x] 建立 Android Studio 專案（Empty Compose Activity）
+- [x] 設定 `build.gradle` 依賴（CameraX、ML Kit Pose Detection）
+- [x] 設定 `AndroidManifest.xml` 相機權限（`CAMERA`）並處理 runtime 權限請求
+- [x] 實作 CameraX `PreviewView` + `ImageAnalysis` use case
+- [x] 串接 ML Kit `PoseDetector`（STREAM_MODE），取得 33 個關鍵點
+- [x] 用 Compose `Canvas` 疊圖畫出左右髖、膝、踝三個關鍵點，並顯示其 `inFrameLikelihood` 信心值
+- [x] 手機直立、全身入鏡情境下實測，確認前鏡頭/後鏡頭、直向/橫向畫面座標轉換正確
 
 ### 驗收標準
 在不同距離（1.5m / 2m / 2.5m）與室內一般光線下，髖膝踝三個關鍵點的信心值能穩定維持在 0.6 以上，畫面疊圖不明顯抖動。
@@ -50,16 +50,16 @@ UI: Jetpack Compose
 **目標**：完成自動計次功能，跑出「對著鏡頭深蹲，App 能自動數次數」的 Demo。
 
 ### 任務清單
-- [ ] 實作三項前處理機制：
-  - [ ] 關鍵點完整性檢查（髖、膝、踝是否齊全）
-  - [ ] 低信心度幀過濾（閾值可設定，建議先試 0.6）
-  - [ ] 指數移動平均（EMA）平滑處理關鍵點座標（alpha 建議 0.2~0.4 之間測試）
-- [ ] 實作五階段狀態機：`STAND → DOWN → BOTTOM → UP → STAND`
-  - [ ] 以髖部垂直位移判斷 STAND → DOWN
-  - [ ] 以「下降轉上升」轉折點（非單一高度閾值）判斷 BOTTOM，並要求連續 N 幀確認轉折避免誤判
-  - [ ] UP → STAND 需回到接近站立基準高度並穩定若干幀後才計次 +1
-- [ ] UI 顯示即時狀態（STAND/DOWN/BOTTOM/UP）與計次數字
-- [ ] 建立參數可調整的設定面板（debug 用），方便之後做「驗證集試門檻」調參
+- [x] 實作三項前處理機制：
+  - [x] 關鍵點完整性檢查（髖、膝、踝是否齊全）
+  - [x] 低信心度幀過濾（閾值可設定，建議先試 0.6）
+  - [x] 指數移動平均（EMA）平滑處理關鍵點座標（alpha 建議 0.2~0.4 之間測試）
+- [x] 實作五階段狀態機：`STAND → DOWN → BOTTOM → UP → STAND`
+  - [x] 以髖部垂直位移判斷 STAND → DOWN
+  - [x] 以「下降轉上升」轉折點（非單一高度閾值）判斷 BOTTOM，並要求連續 N 幀確認轉折避免誤判
+  - [x] UP → STAND 需回到接近站立基準高度並穩定若干幀後才計次 +1
+- [x] UI 顯示即時狀態（STAND/DOWN/BOTTOM/UP）與計次數字
+- [x] 建立參數可調整的設定面板（debug 用），方便之後做「驗證集試門檻」調參
 
 ### 驗收標準
 連續深蹲 10 下，系統計次誤差在 ±1 以內；輕微晃動（如站立時小幅搖晃）不會誤觸發計次。
@@ -74,10 +74,10 @@ UI: Jetpack Compose
 **目標**：完成站姿校正、基準深蹲校正流程，並依訓練模式即時顯示綠黃紅回饋。
 
 ### 任務清單
-- [ ] 實作站姿校正流程：要求使用者站立維持約 3 秒，計算站立基準高度
-- [ ] 實作基準深蹲校正流程：要求使用者完成 2 次舒適可控深蹲，取兩次 BOTTOM 深度平均值作為 `Duser`
-- [ ] 每次 BOTTOM 觸發時計算深度達成率 `p = Dnow / Duser`
-- [ ] 實作三種訓練模式（入門 L1 / 一般 L2 / 進階 L3）與對應門檻表：
+- [x] 實作站姿校正流程：要求使用者站立維持約 3 秒，計算站立基準高度
+- [x] 實作基準深蹲校正流程：要求使用者完成 2 次舒適可控深蹲，取兩次 BOTTOM 深度平均值作為 `Duser`
+- [x] 每次 BOTTOM 觸發時計算深度達成率 `p = Dnow / Duser`
+- [x] 實作三種訓練模式（入門 L1 / 一般 L2 / 進階 L3）與對應門檻表：
 
   | 模式 | 綠色 | 黃色 | 紅色 |
   |---|---|---|---|
@@ -85,8 +85,8 @@ UI: Jetpack Compose
   | 一般 L2 | p ≥ 1.00 | 1.00 > p ≥ 0.85 | p < 0.85 |
   | 進階 L3 | p ≥ 1.10 | 1.10 > p ≥ 0.95 | p < 0.95 |
 
-- [ ] UI 加入模式選擇（校正前先選定模式）
-- [ ] BOTTOM 觸發時顯示對應顏色的視覺回饋（僅觸發一次，避免畫面閃爍）
+- [x] UI 加入模式選擇（校正前先選定模式）
+- [x] BOTTOM 觸發時顯示對應顏色的視覺回饋（僅觸發一次，避免畫面閃爍）
 
 ### 驗收標準
 不同身高/柔軟度的測試者做校正流程後，各自的 `Duser` 合理反映其個人深蹲能力；切換三種模式時回饋門檻確實依表格切換。
@@ -101,15 +101,15 @@ UI: Jetpack Compose
 **目標**：完成完整回饋鏈，並建立後續資料蒐集所需的紀錄機制。
 
 ### 任務清單
-- [ ] 實作膝內夾判定：BOTTOM 觸發瞬間，以髖寬正規化膝踝水平偏移量，判斷是否明顯內夾
-- [ ] 姿勢判定僅在 BOTTOM 觸發一次（避免頻繁閃爍/誤判）
-- [ ] 整合語音提示（`AVSpeechSynthesizer` 對應 Android 為 `TextToSpeech`）：
-  - [ ] 紅色回饋 → 語音提示蹲深不足
-  - [ ] 膝內夾判定為真 → 語音提示膝蓋外推
-- [ ] 建立 Room 資料庫，設計 `SquatRepRecord` 資料表（timestamp、depthRatio、kneeValgus、feedbackColor、mode）
-- [ ] 每次計次完成時寫入一筆紀錄
-- [ ] （研究用）加入「除錯/研究模式」開關：開啟後將每幀原始關鍵點座標、EMA 平滑後座標、狀態機狀態輸出成 CSV/JSON，供後續人工標註比對
-- [ ] 訓練紀錄簡易檢視頁面（本次訓練次數、達標率分布）
+- [x] 實作膝內夾判定：BOTTOM 觸發瞬間，以髖寬正規化膝踝水平偏移量，判斷是否明顯內夾
+- [x] 姿勢判定僅在 BOTTOM 觸發一次（避免頻繁閃爍/誤判）
+- [x] 整合語音提示（`AVSpeechSynthesizer` 對應 Android 為 `TextToSpeech`）：
+  - [x] 紅色回饋 → 語音提示蹲深不足
+  - [x] 膝內夾判定為真 → 語音提示膝蓋外推
+- [x] 建立 Room 資料庫，設計 `SquatRepRecord` 資料表（timestamp、depthRatio、kneeValgus、feedbackColor、mode）
+- [x] 每次計次完成時寫入一筆紀錄
+- [x] （研究用）加入「除錯/研究模式」開關：開啟後將每幀原始關鍵點座標、EMA 平滑後座標、狀態機狀態輸出成 CSV/JSON，供後續人工標註比對
+- [x] 訓練紀錄簡易檢視頁面（本次訓練次數、達標率分布）
 
 ### 驗收標準
 完整跑一組訓練（10 下深蹲），能在結束後看到本次紀錄摘要；除錯模式輸出的 CSV 檔案格式可直接匯入 Python 進行後續分析。
@@ -139,8 +139,8 @@ UI: Jetpack Compose
 
 ## 目前狀態
 
-- [ ] M1 進行中
-- [ ] M2 未開始
-- [ ] M3 未開始
-- [ ] M4 未開始
+- [x] M1 完成
+- [x] M2 完成
+- [x] M3 完成
+- [x] M4 完成
 - [ ] M5 未開始

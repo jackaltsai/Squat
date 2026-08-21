@@ -46,6 +46,7 @@ import androidx.core.content.ContextCompat
 import com.heartchen.squat.config.Config
 import com.heartchen.squat.data.SquatDatabase
 import com.heartchen.squat.data.SquatRepRecord
+import com.heartchen.squat.debug.FrameLogger
 import com.heartchen.squat.pose.EmaSmoother
 import com.heartchen.squat.pose.FramingIssue
 import com.heartchen.squat.pose.KeyPoint
@@ -66,6 +67,7 @@ import com.heartchen.squat.squat.kneeValgusRatio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -115,11 +117,24 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
     // 六個關鍵點疊圖/信心值列表只是 M1 除錯用，受測者訓練時預設不顯示，避免分散注意力。
+    // 同一個開關也控制 M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態）。
     var debugMode by remember { mutableStateOf(false) }
+    var frameLogger by remember { mutableStateOf<FrameLogger?>(null) }
     var framingIssue by remember { mutableStateOf(FramingIssue.OK) }
 
     val database = remember { SquatDatabase.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
+
+    // 除錯模式開啟時才建立 CSV 紀錄檔；關閉或離開畫面時 flush + 關閉檔案，避免資料遺失。
+    DisposableEffect(debugMode) {
+        if (debugMode) {
+            frameLogger = FrameLogger(context)
+        }
+        onDispose {
+            frameLogger?.close()
+            frameLogger = null
+        }
+    }
 
     val emaSmoother = remember { EmaSmoother(Config.EMA_ALPHA) }
     val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }
@@ -212,6 +227,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             if (frame == null || !isReady) return@PoseAnalyzer
 
             val smoothedByType = emaSmoother.smooth(frame.keyPoints).associateBy { it.type }
+            var stateForLog = flowStep.name
 
             when (flowStep) {
                 FlowStep.SELECT_MODE -> Unit
@@ -240,6 +256,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     val sm = calibrationStateMachine ?: return@PoseAnalyzer
                     val newState = sm.update(smoothedByType)
                     calibrationSquatState = newState
+                    stateForLog = "CALIBRATION_${newState.name}"
                     if (newState == SquatState.BOTTOM) {
                         sm.lastBottomDepthRatio?.let { depth ->
                             calibrationDepths = calibrationDepths + depth
@@ -262,6 +279,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     val newState = sm.update(smoothedByType)
                     squatState = newState
                     repCount = sm.repCount
+                    stateForLog = newState.name
                     if (newState == SquatState.BOTTOM) {
                         val dNow = sm.lastBottomDepthRatio
                         val mode = trainingMode
@@ -296,6 +314,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     Log.d(TAG, "state=$newState count=${sm.repCount} p=${duser?.let { d -> sm.lastBottomDepthRatio?.div(d) }}")
                 }
             }
+
+            // 研究模式：每一幀（品質通過後）都記錄原始座標、EMA 平滑座標與目前狀態，供後續匯出 CSV 分析。
+            frameLogger?.logFrame(
+                rawByType = frame.keyPoints.associateBy { it.type },
+                emaByType = smoothedByType,
+                state = stateForLog
+            )
         }
 
         cameraProviderFuture.addListener({
@@ -416,6 +441,16 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.bodyMedium
             )
+            frameLogger?.let { logger ->
+                Text(
+                    text = "研究紀錄中：${File(logger.filePath).name}",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
         }
 
         Column(
