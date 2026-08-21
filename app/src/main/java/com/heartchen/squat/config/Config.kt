@@ -40,4 +40,7 @@ object Config {
 
     /** 框位引導：髖部 Y 座標低於畫面高度此比例，視為上半身可能被裁掉，需請使用者調整。 */
     const val FRAMING_HIP_NEAR_TOP_RATIO = 0.08f
+
+    /** M4 膝內夾判定：（踝距 - 膝距）除以髖寬，超過此比例視為膝蓋內夾，需後續用驗證集調參。 */
+    const val KNEE_VALGUS_RATIO_THRESHOLD = 0.15f
 }

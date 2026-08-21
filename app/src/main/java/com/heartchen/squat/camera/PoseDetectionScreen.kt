@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.heartchen.squat.config.Config
+import com.heartchen.squat.data.SquatDatabase
+import com.heartchen.squat.data.SquatRepRecord
 import com.heartchen.squat.pose.EmaSmoother
 import com.heartchen.squat.pose.FramingIssue
 import com.heartchen.squat.pose.KeyPoint
@@ -57,12 +60,16 @@ import com.heartchen.squat.squat.DepthFeedback
 import com.heartchen.squat.squat.SquatState
 import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
+import com.heartchen.squat.squat.detectKneeValgus
 import com.heartchen.squat.squat.evaluateDepthFeedback
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.Executors
 
 private const val TAG = "PoseDetectionScreen"
+private const val KNEE_VALGUS_MESSAGE = "膝蓋往外一點"
 
 /** M3 流程：選模式 → 站姿校正（3 秒）→ 基準深蹲校正（2 次）→ 正式訓練。 */
 private enum class FlowStep { SELECT_MODE, STAND_HOLD, SQUAT_CALIBRATION, TRAINING }
@@ -102,6 +109,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var squatState by remember { mutableStateOf(SquatState.STAND) }
     var repCount by remember { mutableIntStateOf(0) }
     var depthFeedback by remember { mutableStateOf<DepthFeedback?>(null) }
+    var kneeValgusFlag by remember { mutableStateOf(false) }
+    var pendingRecord by remember { mutableStateOf<SquatRepRecord?>(null) }
+    var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
+    var showHistory by remember { mutableStateOf(false) }
+
+    val database = remember { SquatDatabase.getInstance(context) }
+    val coroutineScope = rememberCoroutineScope()
 
     val emaSmoother = remember { EmaSmoother(Config.EMA_ALPHA) }
     val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }
@@ -131,12 +145,22 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     }
 
     // BOTTOM 觸發的顏色回饋只維持短暫時間，避免一直卡在畫面上；同步用語音念出訊息。
+    // 用 QUEUE_ADD 而非 QUEUE_FLUSH，避免跟下面膝內夾的語音互相蓋掉。
     LaunchedEffect(depthFeedback) {
         val feedback = depthFeedback
         if (feedback != null) {
-            textToSpeech.value?.speak(feedback.message, TextToSpeech.QUEUE_FLUSH, null, null)
+            textToSpeech.value?.speak(feedback.message, TextToSpeech.QUEUE_ADD, null, null)
             delay(2000)
             depthFeedback = null
+        }
+    }
+
+    // M4：膝內夾同樣只在 BOTTOM 觸發一次，語音提示「膝蓋往外一點」。
+    LaunchedEffect(kneeValgusFlag) {
+        if (kneeValgusFlag) {
+            textToSpeech.value?.speak(KNEE_VALGUS_MESSAGE, TextToSpeech.QUEUE_ADD, null, null)
+            delay(2000)
+            kneeValgusFlag = false
         }
     }
 
@@ -205,6 +229,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 
                 FlowStep.TRAINING -> {
                     val sm = trainingStateMachine ?: return@PoseAnalyzer
+                    val previousRepCount = sm.repCount
                     val newState = sm.update(smoothedByType)
                     squatState = newState
                     repCount = sm.repCount
@@ -212,9 +237,30 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val dNow = sm.lastBottomDepthRatio
                         val mode = trainingMode
                         val dUser = duser
+                        val kneeValgus = detectKneeValgus(smoothedByType)
+                        kneeValgusFlag = kneeValgus == true
                         if (dNow != null && mode != null && dUser != null && dUser > 0f) {
-                            depthFeedback = evaluateDepthFeedback(dNow / dUser, mode)
+                            val p = dNow / dUser
+                            val feedback = evaluateDepthFeedback(p, mode)
+                            depthFeedback = feedback
+                            pendingRecord = SquatRepRecord(
+                                timestamp = System.currentTimeMillis(),
+                                depthRatio = p,
+                                kneeValgus = kneeValgus == true,
+                                feedbackColor = feedback,
+                                mode = mode
+                            )
                         }
+                    }
+                    // 計次在 UP → STAND 那一刻才 +1，此時才算這一下真正完成，寫入該次紀錄。
+                    if (sm.repCount > previousRepCount) {
+                        pendingRecord?.let { record ->
+                            sessionRecords = sessionRecords + record
+                            coroutineScope.launch(Dispatchers.IO) {
+                                database.squatRepDao().insert(record)
+                            }
+                        }
+                        pendingRecord = null
                     }
                     Log.d(TAG, "state=$newState count=${sm.repCount} p=${duser?.let { d -> sm.lastBottomDepthRatio?.div(d) }}")
                 }
@@ -293,23 +339,40 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium
         )
 
-        Text(
-            text = "切換鏡頭",
-            color = Color.White,
+        Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                .clickable {
-                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                        CameraSelector.LENS_FACING_FRONT
-                    } else {
-                        CameraSelector.LENS_FACING_BACK
+                .padding(16.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "切換鏡頭",
+                color = Color.White,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .clickable {
+                        lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                            CameraSelector.LENS_FACING_FRONT
+                        } else {
+                            CameraSelector.LENS_FACING_BACK
+                        }
                     }
-                }
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.bodyMedium
-        )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (flowStep == FlowStep.TRAINING) {
+                Text(
+                    text = "訓練歷程",
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .clickable { showHistory = true }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -339,6 +402,17 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                             .padding(horizontal = 20.dp, vertical = 10.dp)
                     )
+                    if (kneeValgusFlag) {
+                        Text(
+                            text = "膝蓋內夾，往外一點",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .background(Color(0xFFD50000).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
 
                 FlowStep.SQUAT_CALIBRATION -> {
@@ -395,6 +469,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
 
             FlowStep.SQUAT_CALIBRATION -> Unit
+        }
+
+        if (showHistory) {
+            TrainingHistoryOverlay(
+                records = sessionRecords,
+                onClose = { showHistory = false }
+            )
         }
     }
 }
@@ -484,6 +565,48 @@ private fun DepthFeedbackBanner(feedback: DepthFeedback) {
                 .background(color.copy(alpha = 0.85f), RoundedCornerShape(16.dp))
                 .padding(horizontal = 32.dp, vertical = 20.dp)
         )
+    }
+}
+
+/** M4：訓練歷程頁面，顯示本次訓練（尚未離開此畫面前）的次數、深度達標比例、膝內夾比例。 */
+@Composable
+private fun TrainingHistoryOverlay(records: List<SquatRepRecord>, onClose: () -> Unit) {
+    val total = records.size
+    val greenCount = records.count { it.feedbackColor == DepthFeedback.GREEN }
+    val valgusCount = records.count { it.kneeValgus }
+    val greenRatio = if (total > 0) greenCount * 100 / total else 0
+    val valgusRatio = if (total > 0) valgusCount * 100 / total else 0
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.75f))
+            .clickable { onClose() }
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .background(Color(0xFF212121), RoundedCornerShape(16.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "本次訓練歷程",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = "次數：$total", color = Color.White, fontSize = 18.sp)
+            Text(text = "深度達標比例：$greenRatio%（$greenCount/$total）", color = Color.White, fontSize = 18.sp)
+            Text(text = "膝內夾比例：$valgusRatio%（$valgusCount/$total）", color = Color.White, fontSize = 18.sp)
+            Text(
+                text = "點擊任意處關閉",
+                color = Color.Gray,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
     }
 }
 
