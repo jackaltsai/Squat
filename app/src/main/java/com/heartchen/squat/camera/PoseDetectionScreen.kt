@@ -116,6 +116,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var showHistory by remember { mutableStateOf(false) }
     // 六個關鍵點疊圖/信心值列表只是 M1 除錯用，受測者訓練時預設不顯示，避免分散注意力。
     var debugMode by remember { mutableStateOf(false) }
+    var framingIssue by remember { mutableStateOf(FramingIssue.OK) }
 
     val database = remember { SquatDatabase.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
@@ -186,6 +187,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
         var wasReady = false
+        var framingIssueStreakValue = FramingIssue.OK
+        var framingIssueStreakCount = 0
         val analyzer = PoseAnalyzer(isFrontCamera = isFrontCamera) { frame ->
             poseFrame = frame
             val isReady = frame != null && frame.passesQualityCheck()
@@ -193,6 +196,19 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
             }
             wasReady = isReady
+
+            // 框位引導同一個問題須連續穩定幾幀才算數，避免深蹲快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
+            val currentFramingIssue = evaluateFraming(frame)
+            if (currentFramingIssue == framingIssueStreakValue) {
+                framingIssueStreakCount++
+            } else {
+                framingIssueStreakValue = currentFramingIssue
+                framingIssueStreakCount = 1
+            }
+            if (framingIssueStreakCount >= Config.FRAMING_STABLE_FRAMES) {
+                framingIssue = currentFramingIssue
+            }
+
             if (frame == null || !isReady) return@PoseAnalyzer
 
             val smoothedByType = emaSmoother.smooth(frame.keyPoints).associateBy { it.type }
@@ -458,8 +474,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 else -> Unit
             }
 
-            val framingIssue = evaluateFraming(currentFrame)
-            // framingIssue 這個值只有在真的改變時才會觸發，不會每幀都重複念。
+            // framingIssue 已在 analyzer 內做連續幀確認，這裡只有在真的穩定改變時才會觸發，不會每幀都重複念。
             LaunchedEffect(framingIssue) {
                 if (framingIssue != FramingIssue.OK) {
                     textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
