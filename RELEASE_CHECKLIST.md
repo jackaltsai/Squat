@@ -112,7 +112,7 @@
 
 | 項目 | 狀態 |
 |---|---|
-| App Icon | ✅ 已完成 |
+| App Icon | ⚠️ 你在本機 Android Studio 已完成，但**尚未 commit/push**，此分支的 `res/mipmap-*` 仍是預設綠色機器人範本圖示 |
 | 隱私權政策 | ⏳ 草稿已完成（`docs/PRIVACY_POLICY.md`），待用 GitHub Pages 發布公開 URL |
 | Release 簽署設定 | ⏳ 操作步驟已寫好（`docs/SIGNING_SETUP.md`），待你在 Android Studio 跑一次精靈產生金鑰 |
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
