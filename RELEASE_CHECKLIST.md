@@ -45,10 +45,7 @@
 - [x] 已確認：`pose-detection-accurate` 模型為 **bundled model，直接打包在 App 安裝檔內**，不需連網下載、不會將影像傳送到外部伺服器（官方文件：ML Kit pose detection 使用 bundled 依賴，模型隨 App 一起發布）
 - [x] App 內權限說明（rationale UI）已存在（`MainActivity.kt` 的 `CameraPermissionRationale`），已補上「影像僅用於即時姿態分析，不會被儲存、錄影或上傳」文字，與隱私權政策一致
 - [x] **隱私權政策（Privacy Policy）**：草稿已完成 → `docs/PRIVACY_POLICY.md`（原始內容）/ `docs/privacy-policy.html`（可直接發布的網頁版）
-  - [ ] 透過 GitHub Pages 發布 `docs/privacy-policy.html`，取得公開 URL 填入 Play Console
-    1. GitHub repo → Settings → Pages
-    2. Source 選 "Deploy from a branch"，Branch 選這個分支、資料夾選 `/docs`
-    3. 存檔後取得網址（格式類似 `https://jackaltsai.github.io/Squat/privacy-policy.html`），填入 Play Console → App content → Privacy Policy
+  - [x] 已透過 GitHub Pages 發布，公開 URL：**`https://jackaltsai.github.io/Squat/privacy-policy.html`**（Play Console → App content → Privacy Policy 直接填這個網址）
   - [x] 內容已涵蓋：相機用途、影像資料不離開裝置、Room 本地訓練紀錄的儲存與刪除方式、除錯模式資料僅存本機、聯絡方式
 
 ---
@@ -114,7 +111,7 @@
 | 項目 | 狀態 |
 |---|---|
 | App Icon | ✅ 已完成並推送，adaptive icon 背景 bug（誤留綠色格線範本）已修正 |
-| 隱私權政策 | ⏳ 草稿已完成（`docs/PRIVACY_POLICY.md`），待用 GitHub Pages 發布公開 URL |
+| 隱私權政策 | ✅ 已發布：`https://jackaltsai.github.io/Squat/privacy-policy.html` |
 | Release 簽署設定 | ✅ 已產生正式金鑰並成功輸出第一個已簽署 `.aab`；待你確認金鑰檔案/密碼已備份到安全位置 |
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
 | 商店文案 | ✅ 草稿已完成（`docs/STORE_LISTING.md`），待校對 |
@@ -122,7 +119,7 @@
 | Play 開發者帳號 | ⏳ 待確認是否已註冊 |
 
 ### 這台環境做不到、需要你本人操作的項目
-- 產生正式簽署金鑰（需要 Android Studio + 本機/實機環境，這裡沒有 Android SDK 可驗證建置）
-- 在 GitHub 網頁介面開啟 Pages（repo 設定變更，沒有對應 API 工具可自動做）
+- ~~產生正式簽署金鑰~~ ✅ 已完成
+- ~~在 GitHub 網頁介面開啟 Pages~~ ✅ 已完成，隱私權政策已上線
 - Play Console 各項表單實際勾選送出、開發者帳號註冊與繳費
 - 實機截圖（需要真的跑起 App 操作各畫面）
