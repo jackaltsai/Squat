@@ -18,9 +18,9 @@
 
 ## 2. 簽署金鑰（Signing）
 
-- [ ] 產生正式 **Upload Key** 並設定 `release` buildType 簽署 → 完整操作步驟見 `docs/SIGNING_SETUP.md`
-  - 本專案用 AGP `9.3.1` 新版宣告式 DSL，建議用 **Android Studio 的 Generate Signed App Bundle 精靈**產生 keystore 並自動寫入 `build.gradle.kts`，不要手動猜語法改檔案
-- [ ] 金鑰檔案、密碼、別名（alias）**妥善備份**（遺失將無法更新已上架的 App）
+- [x] 已產生正式 **Upload Key**（`~/keystores/squat-release.jks`）並成功產生第一個已簽署的 `.aab`（透過 Android Studio Generate Signed App Bundle 精靈）
+  - 實測確認：這個精靈**不會**改動 `app/build.gradle.kts`，是獨立於 Gradle 的一次性簽署流程；之後每次出新版本要重跑一次精靈，詳見 `docs/SIGNING_SETUP.md`
+- [ ] 金鑰檔案、密碼、別名（alias）**妥善備份**到至少兩個安全位置（提醒過，待你確認已完成）
 - [x] `.gitignore` 已排除 `*.jks` / `*.keystore` / `keystore.properties`，避免金鑰誤入版控
 - [ ] 啟用 **Play App Signing**（Google 代管正式簽署金鑰，Upload Key 僅用於上傳）
 - [ ] 確認 `release` buildType 是否要開啟 R8/ProGuard（目前 `optimization.enable = false`），若開啟需測試 ML Kit / CameraX / Room 相關 class 是否被誤刪，必要時補 `proguard-rules.pro` 規則
@@ -115,7 +115,7 @@
 |---|---|
 | App Icon | ✅ 已完成並推送，adaptive icon 背景 bug（誤留綠色格線範本）已修正 |
 | 隱私權政策 | ⏳ 草稿已完成（`docs/PRIVACY_POLICY.md`），待用 GitHub Pages 發布公開 URL |
-| Release 簽署設定 | ⏳ 操作步驟已寫好（`docs/SIGNING_SETUP.md`），待你在 Android Studio 跑一次精靈產生金鑰 |
+| Release 簽署設定 | ✅ 已產生正式金鑰並成功輸出第一個已簽署 `.aab`；待你確認金鑰檔案/密碼已備份到安全位置 |
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
 | 商店文案 | ✅ 草稿已完成（`docs/STORE_LISTING.md`），待校對 |
 | 商店截圖 | ❌ 尚未準備（需實機操作各畫面截圖） |

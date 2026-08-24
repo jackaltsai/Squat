@@ -19,17 +19,17 @@
    - 按 OK 產生 `.jks` 檔案
 5. 回到精靈，確認 Key store path / password / alias 都已帶入，按 **Next**
 6. Destination Folder 選輸出位置，Build Variants 勾選 **release**，Signature Versions 勾選 **V1 + V2**（預設即可）
-7. 按 **Finish**，Android Studio 會：
-   - 產生已簽署的 `.aab` 檔案
-   - **同時自動在 `app/build.gradle.kts` 寫入對應的 `signingConfigs` 區塊**（正確對應這個 AGP 版本的語法，不需要你手動編輯）
+7. 按 **Finish**（或 **Create**），Android Studio 會直接產生已簽署的 `.aab` 檔案（例如 `app/release/app-release.aab`）
+
+**實測更正**：Generate Signed App Bundle 精靈**不會**修改 `app/build.gradle.kts`，它是獨立於 Gradle 建置腳本的一次性簽署流程——金鑰只留在你本機指定的 `.jks` 路徑，`build.gradle.kts` 完全不受影響。這其實是好事：金鑰資訊不會意外被寫進任何會進版控的檔案裡。代價是每次要出新版本，都要重新跑一次這個精靈（Key store path 選同一個 `.jks` 檔案即可，Android Studio 通常會記住最近用過的路徑）。
 
 ## 之後的重要備份動作
 
-- [ ] 將產生的 `.jks` 檔案備份到至少兩個安全位置（例如密碼管理工具的安全附件 + 加密雲端硬碟），**遺失此檔案將無法再更新已上架的 App**
-- [ ] 記錄 keystore 密碼、alias、alias 密碼（建議存入密碼管理工具，不要存在純文字檔或 git）
-- [ ] 確認 `.gitignore` 已排除 `*.jks` / `*.keystore` / `keystore.properties`（本 repo 已加入，見 `.gitignore`）
+- [x] 產生的 `.jks` 檔案要備份到至少兩個安全位置（例如密碼管理工具的安全附件 + 加密雲端硬碟），**遺失此檔案將無法再更新已上架的 App**
+- [x] 記錄 keystore 密碼、alias、alias 密碼（建議存入密碼管理工具，不要存在純文字檔或 git）
+- [x] 確認 `.gitignore` 已排除 `*.jks` / `*.keystore` / `keystore.properties`（本 repo 已加入，見根目錄 `.gitignore`）；`app/release/` 建置產出資料夾已加入 `app/.gitignore`
 - [ ] 上傳第一個 `.aab` 到 Play Console 後，**啟用 Play App Signing**（Google 代管正式簽署金鑰，你手上的 `.jks` 僅作為之後上傳版本用的 Upload Key）
 
 ## 若要改用 CI / 命令列建置（非必要，之後有需要再做）
 
-Android Studio 精靈寫入 `signingConfigs` 後，之後可改用 `keystore.properties`（不進 git）+ 環境變數的方式讓 CI 建置時讀取密碼，避免密碼寫死在 `build.gradle.kts` 裡。實作這塊建議等精靈跑過一次、看到 IDE 實際產生的語法後，再依那個語法調整成讀取外部檔案，避免我在沒有實際語法參考下猜測寫錯。
+如果之後想用 `./gradlew bundleRelease` 命令列或 CI 自動建置簽署版本（而不是每次手動跑精靈），才需要真的把 `signingConfigs` 寫進 `app/build.gradle.kts`，讀取 `keystore.properties`（不進 git）裡的密碼。這塊等有實際需求、且能在有 Android SDK 的環境驗證語法時再做，避免無法測試就手動改建置腳本。
