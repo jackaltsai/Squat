@@ -1,7 +1,7 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態：`versionCode 1` / `versionName "1.0"`，App Icon 你已在本機完成但尚未 push，尚未建立正式簽署金鑰。
+> 目前狀態：`versionCode 1` / `versionName "1.0"`，App Icon 已完成並修正 adaptive icon 背景 bug，尚未建立正式簽署金鑰。
 
 ---
 
@@ -9,9 +9,9 @@
 
 - [x] `app_name`（首頁圖示下方標籤）已從預設的 `Squat` 改為 `深蹲教練`，與 `docs/STORE_LISTING.md` 的商店標題語系一致
 - [x] `applicationId`（`com.heartchen.squat`）— 確認為最終值，**上架後無法更改**，目前值可用
-- [ ] Icon：你已在本機 Android Studio 完成，**待 push 上來**才能在此確認：
-  - [ ] Adaptive icon 前景/背景在圓形、方形、圓角方形皆無裁切跑版
-  - [ ] Play 商店用的 **512×512 高解析 icon**（PNG，32-bit）另外準備好，供 Play Console 上傳（icon push 上來後我可以幫你確認/處理）
+- [x] Icon 已 push 並檢查：
+  - [x] Adaptive icon 背景原本仍是 Android Studio 預設綠色格線範本（`ic_launcher_background.xml` 沒被正確覆蓋），已修正為白色純底，跟 legacy icon / Play 商店圖示的白色背景一致
+  - [x] Play 商店用的 512×512 icon 已存在：`app/src/main/ic_launcher-playstore.png`（Image Asset Studio 自動產生）
 - [x] `versionCode 1` / `versionName "1.0"` 適合作為首次上架版本，之後每次上傳遞增 `versionCode` 即可，暫不需調整
 
 ---
@@ -113,7 +113,7 @@
 
 | 項目 | 狀態 |
 |---|---|
-| App Icon | ⚠️ 你在本機 Android Studio 已完成，但**尚未 commit/push**，此分支的 `res/mipmap-*` 仍是預設綠色機器人範本圖示 |
+| App Icon | ✅ 已完成並推送，adaptive icon 背景 bug（誤留綠色格線範本）已修正 |
 | 隱私權政策 | ⏳ 草稿已完成（`docs/PRIVACY_POLICY.md`），待用 GitHub Pages 發布公開 URL |
 | Release 簽署設定 | ⏳ 操作步驟已寫好（`docs/SIGNING_SETUP.md`），待你在 Android Studio 跑一次精靈產生金鑰 |
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
