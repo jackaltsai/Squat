@@ -1,18 +1,18 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態：`versionCode 1` / `versionName "1.0"`，App Icon 已完成，尚未建立正式簽署金鑰。
+> 目前狀態：`versionCode 1` / `versionName "1.0"`，App Icon 你已在本機完成但尚未 push，尚未建立正式簽署金鑰。
 
 ---
 
 ## 1. 應用程式身分與版本
 
-- [ ] 確認 App 名稱（`app_name`）為正式上架名稱，且與 Play 商店標題一致
-- [ ] 確認 `applicationId`（`com.heartchen.squat`）為最終值 — **上架後無法更改**
-- [ ] Icon 已完成（見前次對話），需同時確認：
+- [x] `app_name`（首頁圖示下方標籤）已從預設的 `Squat` 改為 `深蹲教練`，與 `docs/STORE_LISTING.md` 的商店標題語系一致
+- [x] `applicationId`（`com.heartchen.squat`）— 確認為最終值，**上架後無法更改**，目前值可用
+- [ ] Icon：你已在本機 Android Studio 完成，**待 push 上來**才能在此確認：
   - [ ] Adaptive icon 前景/背景在圓形、方形、圓角方形皆無裁切跑版
-  - [ ] Play 商店用的 **512×512 高解析 icon**（PNG，32-bit，含 alpha）另外準備好，供 Play Console 上傳
-- [ ] `versionCode` / `versionName` 規劃版號策略（例如每次上傳遞增 versionCode）
+  - [ ] Play 商店用的 **512×512 高解析 icon**（PNG，32-bit）另外準備好，供 Play Console 上傳（icon push 上來後我可以幫你確認/處理）
+- [x] `versionCode 1` / `versionName "1.0"` 適合作為首次上架版本，之後每次上傳遞增 `versionCode` 即可，暫不需調整
 
 ---
 
