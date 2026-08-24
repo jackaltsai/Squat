@@ -87,7 +87,7 @@ private fun CameraPermissionRationale(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "需要相機權限才能進行深蹲姿態偵測，請允許使用相機。",
+            text = "需要相機權限才能進行深蹲姿態偵測，請允許使用相機。\n\n影像僅用於即時姿態分析，不會被儲存、錄影或上傳。",
             style = MaterialTheme.typography.bodyLarge
         )
         Button(

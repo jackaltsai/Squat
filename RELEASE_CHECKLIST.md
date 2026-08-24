@@ -41,9 +41,9 @@
 
 ## 4. 權限與隱私（本 App 重點：CAMERA 權限）
 
-- [ ] `AndroidManifest.xml` 中 `CAMERA` 權限用途明確（僅用於即時姿態偵測，**不錄影、不上傳影像**）
+- [x] `AndroidManifest.xml` 僅宣告必要的 `CAMERA` 權限與相機硬體 feature，無多餘權限
 - [x] 已確認：`pose-detection-accurate` 模型為 **bundled model，直接打包在 App 安裝檔內**，不需連網下載、不會將影像傳送到外部伺服器（官方文件：ML Kit pose detection 使用 bundled 依賴，模型隨 App 一起發布）
-- [ ] App 內是否有「首次使用相機前」的權限說明（rationale UI），建議加上簡短說明「此 App 使用相機進行姿勢偵測，影像不會被儲存或上傳」
+- [x] App 內權限說明（rationale UI）已存在（`MainActivity.kt` 的 `CameraPermissionRationale`），已補上「影像僅用於即時姿態分析，不會被儲存、錄影或上傳」文字，與隱私權政策一致
 - [x] **隱私權政策（Privacy Policy）**：草稿已完成 → `docs/PRIVACY_POLICY.md`（原始內容）/ `docs/privacy-policy.html`（可直接發布的網頁版）
   - [ ] 透過 GitHub Pages 發布 `docs/privacy-policy.html`，取得公開 URL 填入 Play Console
     1. GitHub repo → Settings → Pages
