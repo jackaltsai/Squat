@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>隱私權政策 — 深蹲智慧健身輔助系統</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+    line-height: 1.75;
+    color: #1a1a1a;
+    background: #ffffff;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 0.9rem; margin-bottom: 32px; }
+  h2 { font-size: 1.15rem; margin-top: 2.2em; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; font-size: 0.95rem; }
+  th { background: #f5f5f5; }
+  a { color: #1a5fb4; }
+  ul { padding-left: 1.3em; }
+</style>
+</head>
+<body>
+
+<h1>隱私權政策（Privacy Policy）</h1>
+<p class="meta">
+  適用產品：深蹲智慧健身輔助系統（Squat / com.heartchen.squat）<br>
+  生效日期：2026-08-24<br>
+  聯絡信箱：hata.s520@gmail.com
+</p>
+
+<p>本隱私權政策說明「深蹲智慧健身輔助系統」（以下稱「本 App」）在您使用時如何處理您的資料。使用本 App 即表示您同意本政策所述內容。</p>
+
+<h2>1. 我們收集哪些資料</h2>
+
+<h3>1.1 相機影像（Camera）</h3>
+<p>本 App 使用裝置相機即時拍攝您運動時的畫面，透過 Google ML Kit Pose Detection 在<strong>裝置本機端（on-device）</strong>進行姿勢辨識運算，用以偵測您的髖、膝、踝等關鍵點位置。</p>
+<ul>
+  <li>相機影像<strong>僅用於即時運算，不會被儲存、不會被錄影存檔，也不會被上傳至本 App 開發者或任何第三方伺服器</strong>。</li>
+  <li>影像資料在畫面顯示後即捨棄，本 App 不會保留任何影格截圖。</li>
+</ul>
+
+<h3>1.2 姿勢分析結果與訓練紀錄</h3>
+<p>本 App 會在裝置本機端計算並儲存以下訓練相關資料（使用 Room 本地資料庫）：</p>
+<ul>
+  <li>深蹲次數、時間戳記</li>
+  <li>深度達成率（p 值）</li>
+  <li>是否偵測到膝內夾</li>
+  <li>回饋等級（綠/黃/紅）與所選訓練模式</li>
+</ul>
+<p>上述資料<strong>僅儲存於您的裝置本機</strong>，不會同步至雲端，也不會傳送給本 App 開發者或第三方。</p>
+
+<h3>1.3 除錯／研究模式（選用功能）</h3>
+<p>若您主動開啟「研究/除錯模式」，本 App 會將每幀關鍵點座標與狀態機狀態輸出為 CSV/JSON 檔案，<strong>僅儲存於您的裝置本機儲存空間</strong>，供您自行匯出分析使用。此功能預設關閉，且輸出內容不含可辨識個人身分的臉部影像，僅含骨架關鍵點座標數值。</p>
+
+<h3>1.4 我們不會收集的資料</h3>
+<p>本 App <strong>不會</strong>收集：</p>
+<ul>
+  <li>您的姓名、帳號、電子郵件等個人識別資訊</li>
+  <li>位置資訊</li>
+  <li>聯絡人、相簿等裝置其他資料</li>
+  <li>供廣告或行銷目的使用的任何資料（本 App 不含廣告 SDK）</li>
+</ul>
+
+<h2>2. 資料如何被使用</h2>
+<p>本機儲存的訓練紀錄僅用於：</p>
+<ul>
+  <li>在 App 內顯示您的訓練歷程統計（次數、達標比例、膝內夾比例）</li>
+  <li>供您個人追蹤訓練狀況</li>
+</ul>
+<p>本 App 不會將任何資料用於廣告投放、使用者輪廓分析或轉售給第三方。</p>
+
+<h2>3. 資料分享</h2>
+<p>本 App <strong>不會</strong>將您的個人資料或訓練紀錄分享、出售或提供給任何第三方。</p>
+<p>Google ML Kit Pose Detection 的姿勢辨識運算在裝置本機端執行；相關套件於首次安裝或更新時，可能透過 Google Play 服務下載模型檔案本身（非您的個人資料），此過程由 Google Play 服務依其自身隱私權政策處理，詳見 <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google 隱私權政策</a>。</p>
+
+<h2>4. 權限使用說明</h2>
+<table>
+  <tr><th>權限</th><th>用途</th></tr>
+  <tr><td>相機（CAMERA）</td><td>即時擷取影像以進行姿勢偵測，不錄影、不上傳</td></tr>
+</table>
+<p>本 App 僅要求運作所必需的相機權限，不會要求儲存、聯絡人、位置等非必要權限。</p>
+
+<h2>5. 資料保留與刪除</h2>
+<ul>
+  <li>訓練紀錄與除錯輸出檔案皆儲存於裝置本機，保留至您手動刪除或<strong>解除安裝本 App</strong>為止（解除安裝將一併清除所有本機資料）。</li>
+  <li>未來版本如提供「App 內清除紀錄」功能，將於此政策更新後同步說明操作方式。</li>
+</ul>
+
+<h2>6. 兒童隱私</h2>
+<p>本 App 不特別鎖定 13 歲以下兒童使用，亦不會刻意收集兒童個人資料。如您發現本 App 意外收集了兒童資料，請透過下方聯絡方式與我們聯繫，我們將盡快處理。</p>
+
+<h2>7. 免責聲明</h2>
+<p>本 App 提供之深蹲動作分析、深度達成率與姿勢回饋僅供<strong>一般健身輔助參考</strong>，<strong>並非醫療器材，亦不構成醫療建議</strong>。若您有特殊健康狀況或身體不適，請於運動前諮詢專業醫療人員或教練。</p>
+
+<h2>8. 政策更新</h2>
+<p>我們可能不定期更新本隱私權政策。政策如有重大變更，將更新本頁「生效日期」，建議您定期查閱。持續使用本 App 即表示您同意更新後的政策內容。</p>
+
+<h2>9. 聯絡我們</h2>
+<p>如您對本隱私權政策有任何疑問，或希望行使資料相關權利，請透過以下方式聯繫：</p>
+<p>Email：<a href="mailto:hata.s520@gmail.com">hata.s520@gmail.com</a></p>
+
+</body>
+</html>

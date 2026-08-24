@@ -44,10 +44,9 @@
 - [ ] `AndroidManifest.xml` 中 `CAMERA` 權限用途明確（僅用於即時姿態偵測，**不錄影、不上傳影像**）
 - [ ] 確認 ML Kit Pose Detection 是否為 **純本地端（on-device）推論**，不會將影像傳送到外部伺服器 → 這點直接影響 Data Safety 表單填寫
 - [ ] App 內是否有「首次使用相機前」的權限說明（rationale UI），建議加上簡短說明「此 App 使用相機進行姿勢偵測，影像不會被儲存或上傳」
-- [ ] **隱私權政策（Privacy Policy）**：
-  - [ ] 撰寫隱私權政策網頁（需公開可存取的 URL，Play Console 必填）
-  - [ ] 內容需涵蓋：使用相機的目的、影像資料是否離開裝置、Room 本地訓練紀錄的儲存與刪除方式、聯絡方式
-  - [ ] 若之後加入「除錯模式匯出 CSV/JSON」功能，需在政策中說明該資料僅存於裝置本地
+- [x] **隱私權政策（Privacy Policy）**：草稿已完成 → `docs/PRIVACY_POLICY.md`（原始內容）/ `docs/privacy-policy.html`（可直接發布的網頁版）
+  - [ ] 透過 GitHub Pages 發布 `docs/privacy-policy.html`，取得公開 URL 填入 Play Console
+  - [x] 內容已涵蓋：相機用途、影像資料不離開裝置、Room 本地訓練紀錄的儲存與刪除方式、除錯模式資料僅存本機、聯絡方式
 
 ---
 
@@ -111,7 +110,7 @@
 | 項目 | 狀態 |
 |---|---|
 | App Icon | ✅ 已完成 |
-| 隱私權政策 | ❌ 尚未撰寫 |
+| 隱私權政策 | ⏳ 草稿已完成，待發布公開 URL |
 | Release 簽署設定 | ❌ 尚未設定 |
 | Data Safety 表單內容 | ⏳ 待確認 ML Kit 是否連網下載模型 |
 | 商店截圖/文案 | ❌ 尚未準備 |
