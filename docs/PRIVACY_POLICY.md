@@ -52,7 +52,7 @@
 
 本 App **不會**將您的個人資料或訓練紀錄分享、出售或提供給任何第三方。
 
-Google ML Kit Pose Detection 的姿勢辨識運算在裝置本機端執行；相關套件於首次安裝或更新時，可能透過 Google Play 服務下載模型檔案本身（非您的個人資料），此過程由 Google Play 服務依其自身隱私權政策處理，詳見 [Google 隱私權政策](https://policies.google.com/privacy)。
+Google ML Kit Pose Detection 採用**打包於 App 安裝檔內**的模型（bundled model），姿勢辨識運算全程於裝置本機端執行，**不需要網路連線、不會下載任何模型或資料，也不會將影像傳送至 Google 或其他第三方伺服器**。
 
 ---
 

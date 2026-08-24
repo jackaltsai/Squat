@@ -42,7 +42,7 @@
 ## 4. 權限與隱私（本 App 重點：CAMERA 權限）
 
 - [ ] `AndroidManifest.xml` 中 `CAMERA` 權限用途明確（僅用於即時姿態偵測，**不錄影、不上傳影像**）
-- [ ] 確認 ML Kit Pose Detection 是否為 **純本地端（on-device）推論**，不會將影像傳送到外部伺服器 → 這點直接影響 Data Safety 表單填寫
+- [x] 已確認：`pose-detection-accurate` 模型為 **bundled model，直接打包在 App 安裝檔內**，不需連網下載、不會將影像傳送到外部伺服器（官方文件：ML Kit pose detection 使用 bundled 依賴，模型隨 App 一起發布）
 - [ ] App 內是否有「首次使用相機前」的權限說明（rationale UI），建議加上簡短說明「此 App 使用相機進行姿勢偵測，影像不會被儲存或上傳」
 - [x] **隱私權政策（Privacy Policy）**：草稿已完成 → `docs/PRIVACY_POLICY.md`（原始內容）/ `docs/privacy-policy.html`（可直接發布的網頁版）
   - [ ] 透過 GitHub Pages 發布 `docs/privacy-policy.html`，取得公開 URL 填入 Play Console
@@ -55,9 +55,9 @@
 
 ## 5. Play Console — Data Safety（資料安全）表單
 
-- [ ] 是否收集資料：勾選「相機」（即時姿態分析，若不儲存影像則說明用途為「App functionality」且不外傳）
-- [ ] 是否收集個人資料：訓練紀錄（時間戳記、深度達成率、模式等）若僅存 Room 本地資料庫，需標示「資料不會離開裝置」
-- [ ] 是否有第三方 SDK 傳輸資料出裝置：確認 ML Kit 是否需要首次下載模型（會連網），若有需在表單中誠實揭露網路存取行為
+- [ ] 是否收集資料：勾選「相機」，用途「App functionality」，**資料不會離開裝置**（相機影像僅即時運算、不儲存不外傳）
+- [ ] 是否收集個人資料：訓練紀錄（時間戳記、深度達成率、模式等）僅存 Room 本地資料庫，勾選「資料不會離開裝置」
+- [x] 第三方 SDK 是否傳輸資料出裝置：已確認 ML Kit pose-detection-accurate 為 bundled model，**不需連網下載模型**，可在表單中如實勾選「App 不需要網路連線即可運作核心功能」
 - [ ] 資料加密（傳輸中/靜態）與使用者刪除資料的方式（例如 App 內清除紀錄功能，或解除安裝即清除）
 
 ---
@@ -115,7 +115,7 @@
 | App Icon | ✅ 已完成 |
 | 隱私權政策 | ⏳ 草稿已完成（`docs/PRIVACY_POLICY.md`），待用 GitHub Pages 發布公開 URL |
 | Release 簽署設定 | ⏳ 操作步驟已寫好（`docs/SIGNING_SETUP.md`），待你在 Android Studio 跑一次精靈產生金鑰 |
-| Data Safety 表單內容 | ⏳ 待確認 ML Kit 是否連網下載模型 |
+| Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
 | 商店文案 | ✅ 草稿已完成（`docs/STORE_LISTING.md`），待校對 |
 | 商店截圖 | ❌ 尚未準備（需實機操作各畫面截圖） |
 | Play 開發者帳號 | ⏳ 待確認是否已註冊 |
