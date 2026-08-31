@@ -97,8 +97,15 @@
 
 **目前卡在哪（2026-08-24 記錄）：**
 - `hata.s520@gmail.com` 底下原本就有一個舊開發人員帳戶（ChungDa Tsai），但**已因久未使用被 Google 關閉，且無法在同一 Google 帳號下重新申請**（Google 政策：一個帳號只能對應一個開發人員帳戶，即使已關閉也不能重辦），註冊費也不會退
-- 改用另一個 Google 帳號 `zykofans@gmail.com` 走全新註冊流程，已經過：接受新版 Terms of Service → 選帳戶類型「Yourself」（個人）→ 進到「What you'll need」說明頁（需要：對外開發者信箱、Google 聯絡電話/信箱、付款方式、之後還要身分驗證）
-- **卡點：目前沒有可用的付款方式繳 US$25 一次性註冊費**，流程先暫停在這裡
+- 改用另一個 Google 帳號 `zykofans@gmail.com` 走全新註冊流程，進度（左側步驟列）：
+  - ✅ Account type（選了 Yourself / 個人）
+  - ✅ What you'll need
+  - ✅ Android developer identity
+  - ✅ Developer name（已填寫）
+  - → **Payments profile**（卡在這裡，需要綁信用卡/簽帳卡）
+  - 未到：Public developer profile / About you / Apps / How Google contacts you / Terms
+- **卡點：Payments profile 這步需要綁付款方式才能繼續**，尚未輸入卡號、**未被扣款**，流程先暫停在這裡，可安全關閉分頁
+- **之後繼續時**：用 `zykofans@gmail.com` 重新登入 `https://play.google.com/console/signup`，走到 Payments profile 這步時可能要重填前面步驟（Google 這流程通常不存進度），備好信用卡/簽帳卡即可完成付款並繼續
 - 注意：Google 這個註冊流程通常不會保留填到一半的進度，之後要繼續大概率要從「選帳戶類型」那步重新點一次
 - **之後繼續時**：用 `zykofans@gmail.com` 登入 `https://play.google.com/console/signup`，重新走一次「Yourself」帳戶類型的流程，準備好信用卡/簽帳卡即可
 
