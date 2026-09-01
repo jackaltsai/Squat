@@ -91,23 +91,19 @@
 
 ## 9. 開發者帳號與帳務
 
-- [ ] Google Play Console 開發者帳號已註冊（個人或組織，注意組織帳號需 D-U-N-S 驗證，耗時較長）
-- [ ] 一次性註冊費（USD $25）已繳納
+- [x] Google Play Console 開發者帳號已註冊（個人帳戶，Google 帳號 `zykofans@gmail.com`）
+- [x] 一次性註冊費（USD $25）已繳納並扣款成功
 - [ ] 若未來規劃付費功能/App，需設定收款帳戶（目前無 IAP 需求可略過）
 
-**目前卡在哪（2026-08-24 記錄）：**
-- `hata.s520@gmail.com` 底下原本就有一個舊開發人員帳戶（ChungDa Tsai），但**已因久未使用被 Google 關閉，且無法在同一 Google 帳號下重新申請**（Google 政策：一個帳號只能對應一個開發人員帳戶，即使已關閉也不能重辦），註冊費也不會退
-- 改用另一個 Google 帳號 `zykofans@gmail.com` 走全新註冊流程，進度（左側步驟列）：
-  - ✅ Account type（選了 Yourself / 個人）
-  - ✅ What you'll need
-  - ✅ Android developer identity
-  - ✅ Developer name（已填寫）
-  - → **Payments profile**（卡在這裡，需要綁信用卡/簽帳卡）
-  - 未到：Public developer profile / About you / Apps / How Google contacts you / Terms
-- **卡點：Payments profile 這步需要綁付款方式才能繼續**，尚未輸入卡號、**未被扣款**，流程先暫停在這裡，可安全關閉分頁
-- **之後繼續時**：用 `zykofans@gmail.com` 重新登入 `https://play.google.com/console/signup`，走到 Payments profile 這步時可能要重填前面步驟（Google 這流程通常不存進度），備好信用卡/簽帳卡即可完成付款並繼續
-- 注意：Google 這個註冊流程通常不會保留填到一半的進度，之後要繼續大概率要從「選帳戶類型」那步重新點一次
-- **之後繼續時**：用 `zykofans@gmail.com` 登入 `https://play.google.com/console/signup`，重新走一次「Yourself」帳戶類型的流程，準備好信用卡/簽帳卡即可
+**歷史記錄（2026-08-24）：**
+- `hata.s520@gmail.com` 底下原本有一個舊開發人員帳戶（ChungDa Tsai），因久未使用被 Google 永久關閉，且該 Google 帳號無法重新申請（Google 政策：一個帳號只能對應一個開發人員帳戶），註冊費也未退還
+- 改用 `zykofans@gmail.com` 走全新註冊流程，中途因缺付款方式暫停過一次，之後確認可付款後完整走完 Account type → Payments profile → Public developer profile → About you → Apps → How Google contacts you → Terms，並成功 **Create account and pay**
+- 「Other Google accounts」問題誠實選了 Yes，並驗證聲明過 `hata.s520@gmail.com`（避免被判定隱瞞帳號關聯）
+
+**接下來要注意：**
+- [ ] 確認帳戶身分驗證（identity verification）是否已通過 — Google 可能還會要求上傳身分證件或影片驗證，未通過驗證可能無法正式發布 App（若被拒絕，註冊費不退）
+- [ ] Contact phone number 若還沒驗證，記得完成簡訊驗證
+- [ ] 帳戶開通後盡快建立第一個 App 項目（就算還沒準備好上傳），避免久未使用又被關閉
 
 ---
 
@@ -130,7 +126,7 @@
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
 | 商店文案 | ✅ 草稿已完成（`docs/STORE_LISTING.md`），待校對 |
 | 商店截圖 | ❌ 尚未準備（需實機操作各畫面截圖） |
-| Play 開發者帳號 | ⏸️ 舊帳戶已關閉無法重用，已用新 Google 帳號開始註冊，卡在缺少付款方式（$25），詳見第 9 節 |
+| Play 開發者帳號 | ✅ 已註冊成功（`zykofans@gmail.com`），$25 已扣款，待確認身分驗證是否通過 |
 
 ### 這台環境做不到、需要你本人操作的項目
 - ~~產生正式簽署金鑰~~ ✅ 已完成
