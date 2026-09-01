@@ -101,8 +101,10 @@
 - 「Other Google accounts」問題誠實選了 Yes，並驗證聲明過 `hata.s520@gmail.com`（避免被判定隱瞞帳號關聯）
 
 **接下來要注意：**
-- [ ] 確認帳戶身分驗證（identity verification）是否已通過 — Google 可能還會要求上傳身分證件或影片驗證，未通過驗證可能無法正式發布 App（若被拒絕，註冊費不退）
-- [ ] Contact phone number 若還沒驗證，記得完成簡訊驗證
+- [x] Verify access to an Android mobile device — 已用手機掃 QR code、登入 Play Console App 完成驗證
+- [ ] **身分驗證（Verify your identity）進行中** — 第一次用身分證上傳被拒（原因：`Provide a document that clearly shows the current address`，只拍到正面，地址在背面沒拍到），已重新上傳（含背面地址頁），目前狀態顯示 **"Google is verifying your identity"，審核中，可能要等幾天**，結果會寄到 `zykofans@gmail.com`
+- [ ] Contact phone number 驗證 — 目前被鎖定，需等身分驗證通過後才能繼續
+- [ ] 身分驗證通過、電話驗證完成後，**Create app** 按鈕才會解鎖，才能開始建立這個 App 的商店列表
 - [ ] 帳戶開通後盡快建立第一個 App 項目（就算還沒準備好上傳），避免久未使用又被關閉
 
 ---
