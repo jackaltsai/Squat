@@ -102,10 +102,10 @@
 
 **接下來要注意：**
 - [x] Verify access to an Android mobile device — 已用手機掃 QR code、登入 Play Console App 完成驗證
-- [ ] **身分驗證（Verify your identity）進行中** — 第一次用身分證上傳被拒（原因：`Provide a document that clearly shows the current address`，只拍到正面，地址在背面沒拍到），已重新上傳（含背面地址頁），目前狀態顯示 **"Google is verifying your identity"，審核中，可能要等幾天**，結果會寄到 `zykofans@gmail.com`
-- [ ] Contact phone number 驗證 — 目前被鎖定，需等身分驗證通過後才能繼續
-- [ ] 身分驗證通過、電話驗證完成後，**Create app** 按鈕才會解鎖，才能開始建立這個 App 的商店列表
-- [ ] 帳戶開通後盡快建立第一個 App 項目（就算還沒準備好上傳），避免久未使用又被關閉
+- [x] **身分驗證（Verify your identity）已通過** — 第一次用身分證上傳被拒（只拍到正面，地址在背面沒拍到），重新上傳含背面地址頁後送審，**比預期快很多就通過了**（原本 Google 說可能要幾天）
+- [x] Contact phone number 驗證 — 已隨帳戶設定完成解鎖並通過
+- [x] **帳戶完全設定完成**：首頁「Finish setting up your developer account」提示卡已消失，**Create app** 按鈕已從灰轉藍可點擊
+- [ ] 帳戶開通後盡快建立第一個 App 項目（就算還沒準備好上傳），避免久未使用又被關閉 ← **下一步**
 
 ---
 
@@ -128,7 +128,7 @@
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
 | 商店文案 | ✅ 草稿已完成（`docs/STORE_LISTING.md`），待校對 |
 | 商店截圖 | ❌ 尚未準備（需實機操作各畫面截圖） |
-| Play 開發者帳號 | ✅ 已註冊成功（`zykofans@gmail.com`），$25 已扣款，待確認身分驗證是否通過 |
+| Play 開發者帳號 | ✅ 完全設定完成（`zykofans@gmail.com`），身分驗證通過，Create app 已解鎖 |
 
 ### 這台環境做不到、需要你本人操作的項目
 - ~~產生正式簽署金鑰~~ ✅ 已完成
