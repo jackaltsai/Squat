@@ -94,6 +94,7 @@
 - [x] Google Play Console 開發者帳號已註冊（個人帳戶，Google 帳號 `zykofans@gmail.com`）
 - [x] 一次性註冊費（USD $25）已繳納並扣款成功
 - [ ] 若未來規劃付費功能/App，需設定收款帳戶（目前無 IAP 需求可略過）
+- [x] **App 項目已建立**：`深蹲教練` / `com.heartchen.squat`，Play Console Dashboard 已可見，接下來走 Internal testing → Finish setting up your app（Store listing）→ Closed testing → Production 路徑
 
 **歷史記錄（2026-08-24）：**
 - `hata.s520@gmail.com` 底下原本有一個舊開發人員帳戶（ChungDa Tsai），因久未使用被 Google 永久關閉，且該 Google 帳號無法重新申請（Google 政策：一個帳號只能對應一個開發人員帳戶），註冊費也未退還
