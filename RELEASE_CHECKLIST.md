@@ -65,19 +65,25 @@
 - [ ] Feature Graphic（1024×500）
 - [ ] 手機截圖至少 2 張（建議 4~8 張，涵蓋：相機骨架偵測畫面、狀態機計次畫面、校正流程、三色回饋畫面、訓練歷程頁）
 - [ ] 若有平板/摺疊裝置支援，準備對應尺寸截圖
-- [ ] App 分類：建議「健康與健身」（Health & Fitness）
-- [ ] 聯絡 Email / 官網（可放隱私權政策頁）
+- [ ] App 分類：建議「健康與健身」（Health & Fitness）— 待在 "Select an app category and provide contact details" 步驟設定
+- [ ] 聯絡 Email / 官網（可放隱私權政策頁）— 同上
 
 ---
 
 ## 7. Play Console — 內容分級與合規
 
-- [ ] 完成 **內容分級問卷（Content Rating）**（填答方向草稿見 `docs/STORE_LISTING.md`）
-- [ ] **目標對象與內容（Target Audience）**：確認是否適合兒童（本 App 屬一般健身工具，通常設定為一般成人/不特定年齡）
-- [x] **廣告聲明**：依賴清單無廣告 SDK，應勾選「不含廣告」
-- [ ] **App 存取權限（App Access）**：若 App 無需登入即可完整使用，勾選「所有功能皆可不受限存取」
-- [ ] **政府/健康相關聲明**：由於涉及運動姿勢回饋，建議在說明中註明「非醫療器材，僅供健身輔助參考，如有身體不適請諮詢專業人士」，避免被歸類為醫療器材相關審查
-- [ ] 美國出口法規合規聲明（Export Compliance，Play Console 上傳時會詢問，App 未使用加密技術則直接勾選標準選項）
+**App content 底下 10 項聲明已於 2026-09-02 全部完成（Play Console → Policy and programs → App content → Actioned 分頁可見）：**
+
+- [x] **Privacy policy**：填了 `https://jackaltsai.github.io/Squat/privacy-policy.html`
+- [x] **Sign in details**：選 No（不需要登入）
+- [x] **Ads**：選不含廣告
+- [x] **Content ratings**：完成 IARC 問卷，Category 選 "All Other App Types"，全區域分級結果都是最低年齡（All ages / Everyone / PEGI 3 / 3+）
+- [x] **Target audience and content**：選 18 and over
+- [x] **Data safety**：完整走完 5 步問卷 —— 相機/訓練紀錄皆不符合「Collected」定義（未離開裝置）不用揭露；唯獨相機即時影像串流因屬於 "ephemeral processing" 規則，勾選 Photos and videos → Videos → Collected（非 Shared）→ ephemeral → App functionality。公開商店頁面最終顯示 "No data collection declared"、"No data shared with third parties"
+- [x] **Government apps**：選 No
+- [x] **Financial features**：選「My app doesn't provide any financial features」
+- [x] **Health apps**：勾選 "Activity and fitness"（不勾 Medical 分類，符合「非醫療器材」定位）
+- [x] **Advertising ID**：選 No（不使用 AAID）
 
 ---
 
