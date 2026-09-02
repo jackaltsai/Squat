@@ -1,7 +1,16 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態：`versionCode 1` / `versionName "1.0"`，App Icon 已完成並修正 adaptive icon 背景 bug，尚未建立正式簽署金鑰。
+> 目前狀態（2026-09-02）：Icon、簽署金鑰、GitHub Pages、Play Console 開發者帳號、App 項目建立、App content 10 項聲明全部完成。
+
+## 📍 下次接續從這裡開始
+
+Play Console → 這個 App 的 Dashboard → **Finish setting up your app** → 剩下兩項：
+
+1. **Select an app category and provide contact details** — 分類選 Health & Fitness，聯絡信箱用 `hata.s520@gmail.com`
+2. **Set up your store listing** — 文案照抄 `docs/STORE_LISTING.md`，但**還缺商店截圖**，可以先填文字部分
+
+之後還要做：Feature Graphic（1024×500）、手機截圖、Internal testing、Closed testing（新帳號需 12 人 14 天）。詳見下方第 6、8 節。
 
 ---
 
