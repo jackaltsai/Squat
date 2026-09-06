@@ -1,16 +1,21 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-02）：Icon、簽署金鑰、GitHub Pages、Play Console 開發者帳號、App 項目建立、App content 10 項聲明全部完成。
+> 目前狀態（2026-09-06）：**「Finish setting up your app」100% 完成**（Store listing 含文案/icon/Feature Graphic/5 張截圖/分類/聯絡資訊全部送出，狀態為 "Ready to send for review"）。Icon、簽署金鑰、GitHub Pages、Play Console 開發者帳號、App content 10 項聲明也都完成。
 
 ## 📍 下次接續從這裡開始
 
-Play Console → 這個 App 的 Dashboard → **Finish setting up your app** → 剩下兩項：
+Play Console Dashboard 現在只剩三個階段，依序進行：
 
-1. **Select an app category and provide contact details** — 分類選 Health & Fitness，聯絡信箱用 `hata.s520@gmail.com`
-2. **Set up your store listing** — 文案照抄 `docs/STORE_LISTING.md`，但**還缺商店截圖**，可以先填文字部分
+1. **Internal testing**（選填，建議先做）— 快速把 `.aab` 傳上去，自己或信任的小圈子先測安裝，幾秒內就能拿到測試版
+2. **Closed testing**（必經關卡）— 需要：
+   - 發布一個 closed testing release
+   - **至少 12 名測試人員加入**（目前 0 人 opted-in）
+   - 讓這 12 人**連續測試至少 14 天**
+   - 這是最花時間的一步，建議**盡早開始找測試人員**，14 天等待期跟其他準備工作可以同時進行
+3. **Production** — 完成 Closed testing 條件後才能申請，届時還要回答一些關於 closed test 的問題（Preview questions 連結可先看內容）
 
-之後還要做：Feature Graphic（1024×500）、手機截圖、Internal testing、Closed testing（新帳號需 12 人 14 天）。詳見下方第 6、8 節。
+詳見下方第 8 節。
 
 ---
 
@@ -100,8 +105,13 @@ Play Console → 這個 App 的 Dashboard → **Finish setting up your app** →
 ## 8. 測試階段（Testing Track）
 
 - [ ] 建立 **Internal Testing**（內部測試）先行驗證上傳流程與安裝
-- [ ] 若為新開發者帳號，Google 要求 **封閉測試（Closed Testing）至少 12 名測試人員、連續 14 天** 才能申請正式上線 Production，需提前規劃時程
+- [ ] **Closed Testing**（必經關卡，2026-09-06 確認條件）：
+  - [ ] Publish a closed testing release（把 `.aab` 傳上去）
+  - [ ] 至少 12 名測試人員 opted-in（目前 0 人）
+  - [ ] 讓這 12 人連續測試至少 14 天
+  - 這步最花時間，**建議提前規劃找 12 位測試人員**（朋友/家人/健身社群皆可，只要願意加入 opt-in 連結），14 天等待期可以跟其他準備工作平行進行
 - [ ] 收集 Pre-launch report（Play Console 自動跑的相容性/穩定性測試）結果，確認無 Crash
+- [ ] Closed testing 跑完後，Apply for production 會問幾個關於這次封閉測試的問題（Dashboard 上有 "Preview questions" 連結可以先看內容）
 
 ---
 
@@ -143,12 +153,16 @@ Play Console → 這個 App 的 Dashboard → **Finish setting up your app** →
 | 隱私權政策 | ✅ 已發布：`https://jackaltsai.github.io/Squat/privacy-policy.html` |
 | Release 簽署設定 | ✅ 已產生正式金鑰並成功輸出第一個已簽署 `.aab`；待你確認金鑰檔案/密碼已備份到安全位置 |
 | Data Safety 表單內容 | ✅ 已確認 ML Kit 為 bundled model，不連網、資料不離開裝置 |
-| 商店文案 | ✅ 草稿已完成（`docs/STORE_LISTING.md`），待校對 |
-| 商店截圖 | ❌ 尚未準備（需實機操作各畫面截圖） |
-| Play 開發者帳號 | ✅ 完全設定完成（`zykofans@gmail.com`），身分驗證通過，Create app 已解鎖 |
+| 商店文案 | ✅ 已填入 Play Console（`docs/STORE_LISTING.md`） |
+| 商店截圖 | ✅ 5 張已上傳（校正流程、深蹲動作中、紅/綠色回饋、模式選擇） |
+| Feature Graphic | ✅ 已生成並上傳（`docs/feature-graphic.png`） |
+| Play 開發者帳號 | ✅ 完全設定完成（`zykofans@gmail.com`），身分驗證通過 |
+| App Store Listing | ✅ 100% 完成，狀態 "Ready to send for review" |
+| Closed Testing | ⏳ 尚未開始，需要 12 名測試人員、連續 14 天 |
 
 ### 這台環境做不到、需要你本人操作的項目
 - ~~產生正式簽署金鑰~~ ✅ 已完成
 - ~~在 GitHub 網頁介面開啟 Pages~~ ✅ 已完成，隱私權政策已上線
-- Play Console 各項表單實際勾選送出、開發者帳號註冊與繳費
-- 實機截圖（需要真的跑起 App 操作各畫面）
+- ~~Play Console 各項表單實際勾選送出、開發者帳號註冊與繳費~~ ✅ 已完成
+- ~~實機截圖~~ ✅ 已完成
+- **找 12 名 Closed Testing 測試人員**（朋友/家人/健身社群），並維持連續 14 天測試 — 這是接下來唯一的大關卡
