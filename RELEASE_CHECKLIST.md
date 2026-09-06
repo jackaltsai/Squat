@@ -70,12 +70,13 @@ Play Console → 這個 App 的 Dashboard → **Finish setting up your app** →
 
 ## 6. Play Console — 商店資訊（Store Listing）
 
-- [x] App 名稱、簡短說明（80 字內）、完整說明（4000 字內）→ 草稿見 `docs/STORE_LISTING.md`（含分類、內容分級填答方向、廣告聲明草稿，建議上架前找人校對文案）
-- [ ] Feature Graphic（1024×500）
-- [ ] 手機截圖至少 2 張（建議 4~8 張，涵蓋：相機骨架偵測畫面、狀態機計次畫面、校正流程、三色回饋畫面、訓練歷程頁）
-- [ ] 若有平板/摺疊裝置支援，準備對應尺寸截圖
-- [ ] App 分類：建議「健康與健身」（Health & Fitness）— 待在 "Select an app category and provide contact details" 步驟設定
-- [ ] 聯絡 Email / 官網（可放隱私權政策頁）— 同上
+- [x] App 名稱、簡短說明（80 字內）、完整說明（4000 字內）→ 已填入 Play Console Store listing（草稿見 `docs/STORE_LISTING.md`）
+- [x] App icon（512×512）→ 用 `app/src/main/ic_launcher-playstore.png` 上傳
+- [x] Feature Graphic（1024×500）→ 已生成並上傳，`docs/feature-graphic.png`（深藍到青綠漸層 + App icon 圓角卡片 + 標語，特意避開 Android 官方綠色範本色）
+- [x] 手機截圖 5 張已上傳（達到 4 張推薦資格門檻）：選擇訓練模式、校正流程、深蹲動作中、紅色警示回饋（蹲太淺了）、綠色達標回饋（深度達標！）
+- [ ] 若有平板/摺疊裝置支援，準備對應尺寸截圖（非必填，目前跳過）
+- [x] App 分類：已設定 Health & Fitness
+- [x] 聯絡 Email / 官網：`hata.s520@gmail.com` / `https://jackaltsai.github.io/Squat/`
 
 ---
 
