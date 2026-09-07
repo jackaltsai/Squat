@@ -1,19 +1,22 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-06）：**「Finish setting up your app」100% 完成**（Store listing 含文案/icon/Feature Graphic/5 張截圖/分類/聯絡資訊全部送出，狀態為 "Ready to send for review"）。Icon、簽署金鑰、GitHub Pages、Play Console 開發者帳號、App content 10 項聲明也都完成。
+> 目前狀態（2026-09-07）：**「Finish setting up your app」100% 完成**。App 端也修正了骨架疊圖 UX（一律顯示，不用開除錯模式）並重新建置簽署過 `.aab`。Closed testing 的 release 已建立，**卡在 Testers 名單，預計星期四才開始加測試人員**。
 
-## 📍 下次接續從這裡開始
+## 📍 下次接續從這裡開始（星期四）
 
-Play Console Dashboard 現在只剩三個階段，依序進行：
+Play Console → 這個 App → **Test and release → Testing → Closed testing → Alpha → Testers 分頁**
 
-1. **Internal testing**（選填，建議先做）— 快速把 `.aab` 傳上去，自己或信任的小圈子先測安裝，幾秒內就能拿到測試版
-2. **Closed testing**（必經關卡）— 需要：
-   - 發布一個 closed testing release
-   - **至少 12 名測試人員加入**（目前 0 人 opted-in）
-   - 讓這 12 人**連續測試至少 14 天**
-   - 這是最花時間的一步，建議**盡早開始找測試人員**，14 天等待期跟其他準備工作可以同時進行
-3. **Production** — 完成 Closed testing 條件後才能申請，届時還要回答一些關於 closed test 的問題（Preview questions 連結可先看內容）
+目前進度：
+- [x] Release 已建立：`1.0 (1) - 初版測試`（用含骨架疊圖修正的新版 `.aab`），狀態 "Not yet sent for review"
+- [x] Countries/regions 已設定：Taiwan
+- [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單**（星期四從這裡繼續）
+- [ ] Testers 名單建好後，記得回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
+- [ ] 送審通過後才會產生「Join on the web」的測試連結，分享給 12 位測試人員
+
+之後還要：
+1. **Closed testing** 需要至少 12 人 opted-in、連續跑滿 14 天才能申請 Production
+2. **Production** — 條件滿足後申請，届時要回答幾題關於這次封閉測試的問題
 
 詳見下方第 8 節。
 
