@@ -116,8 +116,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var pendingRecord by remember { mutableStateOf<SquatRepRecord?>(null) }
     var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
-    // 六個關鍵點疊圖/信心值列表只是 M1 除錯用，受測者訓練時預設不顯示，避免分散注意力。
-    // 同一個開關也控制 M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態）。
+    // 骨架疊圖一律顯示（見下方 PoseOverlay），這個開關只控制信心值數字列表跟
+    // M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態），一般使用者不需要開啟。
     var debugMode by remember { mutableStateOf(false) }
     var frameLogger by remember { mutableStateOf<FrameLogger?>(null) }
     var framingIssue by remember { mutableStateOf(FramingIssue.OK) }
@@ -371,14 +371,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 .onSizeChanged { previewViewSize = it }
         )
 
-        if (debugMode) {
-            poseFrame?.let { frame ->
-                PoseOverlay(
-                    poseFrame = frame,
-                    viewSize = previewViewSize,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+        // 骨架線條與關鍵點一律顯示，方便使用者自行確認有沒有站在鏡頭前、姿勢有沒有被偵測到；
+        // 信心值數字（PoseConfidenceList、下面的「已偵測 X/6」文字）才是研究用的除錯資訊，維持只在除錯模式顯示。
+        poseFrame?.let { frame ->
+            PoseOverlay(
+                poseFrame = frame,
+                viewSize = previewViewSize,
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         val currentFrame = poseFrame
