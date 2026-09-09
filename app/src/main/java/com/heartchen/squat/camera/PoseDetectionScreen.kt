@@ -520,8 +520,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
             }
         }
-        // 獨立置中顯示（不跟頂部的模式/計次/右上角控制項共用同一排），避免文字較長時
-        // 橫向延伸到畫面兩側，蓋住切換鏡頭、除錯模式等常駐控制項。
+        // 放在畫面下方：StandHoldOverlay、DepthFeedbackBanner、SQUAT_CALIBRATION 的提示
+        // 都是用 Alignment.Center，這裡改置中反而會互相蓋住；頂部又是切換鏡頭/除錯模式的常駐 HUD。
+        // 下方是唯一不會跟其他流程專屬疊圖衝突的位置。
         if (framingIssue != FramingIssue.OK) {
             Text(
                 text = framingIssue.message,
@@ -530,8 +531,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 32.dp)
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 32.dp, vertical = 48.dp)
                     .background(Color(0xFFFF6D00).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             )
