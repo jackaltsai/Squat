@@ -1,14 +1,14 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-07）：**「Finish setting up your app」100% 完成**。App 端也修正了骨架疊圖 UX（一律顯示，不用開除錯模式）並重新建置簽署過 `.aab`。Closed testing 的 release 已建立，**卡在 Testers 名單，預計星期四才開始加測試人員**。
+> 目前狀態（2026-09-09）：**「Finish setting up your app」100% 完成**。App 端修正了兩輪 UI bug（骨架疊圖一律顯示、警告訊息跟頂部 HUD 重疊 → 移到畫面下方、切換鏡頭只在選模式畫面顯示），`versionCode` 已升到 2。Closed testing 的 release 2 (1.0) 已上傳存檔，**卡在 Testers 名單，預計星期四才開始加測試人員**。
 
 ## 📍 下次接續從這裡開始（星期四）
 
 Play Console → 這個 App → **Test and release → Testing → Closed testing → Alpha → Testers 分頁**
 
 目前進度：
-- [x] Release 已建立：`1.0 (1) - 初版測試`（用含骨架疊圖修正的新版 `.aab`），狀態 "Not yet sent for review"
+- [x] Release 已更新為 `2 (1.0)`（含最新兩輪 UI bug 修正），舊的 `1 (1.0)` 已被取代
 - [x] Countries/regions 已設定：Taiwan
 - [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單**（星期四從這裡繼續）
 - [ ] Testers 名單建好後，記得回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
@@ -17,6 +17,11 @@ Play Console → 這個 App → **Test and release → Testing → Closed testin
 之後還要：
 1. **Closed testing** 需要至少 12 人 opted-in、連續跑滿 14 天才能申請 Production
 2. **Production** — 條件滿足後申請，届時要回答幾題關於這次封閉測試的問題
+
+**這輪修的 App bug（2026-09-09）：**
+- 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
+- 「偵測不到人/腳踝」等警告訊息原本跟頂部右上角控制項（切換鏡頭、除錯模式）重疊，後來又發現置中會跟站姿校正倒數、深度回饋等疊圖衝突，最後改放在畫面**下方**才不會跟任何東西相撞
+- 「切換鏡頭」從常駐顯示改成只在**選擇訓練模式**畫面出現（訓練開始後不會有人中途切鏡頭）
 
 詳見下方第 8 節。
 
