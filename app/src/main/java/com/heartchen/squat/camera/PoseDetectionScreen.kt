@@ -406,21 +406,25 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "切換鏡頭",
-                color = Color.White,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .clickable {
-                        lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                            CameraSelector.LENS_FACING_FRONT
-                        } else {
-                            CameraSelector.LENS_FACING_BACK
+            // 切換鏡頭只在一開始選模式時需要（架好手機、決定前/後鏡頭），
+            // 訓練開始後沒人會中途去點這個，常駐顯示只會佔位、增加跟其他提示重疊的機會。
+            if (flowStep == FlowStep.SELECT_MODE) {
+                Text(
+                    text = "切換鏡頭",
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                                CameraSelector.LENS_FACING_FRONT
+                            } else {
+                                CameraSelector.LENS_FACING_BACK
+                            }
                         }
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
             if (flowStep == FlowStep.TRAINING) {
                 Text(
                     text = "訓練歷程",
@@ -508,24 +512,29 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 
                 else -> Unit
             }
+        }
 
-            // framingIssue 已在 analyzer 內做連續幀確認，這裡只有在真的穩定改變時才會觸發，不會每幀都重複念。
-            LaunchedEffect(framingIssue) {
-                if (framingIssue != FramingIssue.OK) {
-                    textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
-                }
-            }
+        // framingIssue 已在 analyzer 內做連續幀確認，這裡只有在真的穩定改變時才會觸發，不會每幀都重複念。
+        LaunchedEffect(framingIssue) {
             if (framingIssue != FramingIssue.OK) {
-                Text(
-                    text = framingIssue.message,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .background(Color(0xFFFF6D00).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                )
+                textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
             }
+        }
+        // 獨立置中顯示（不跟頂部的模式/計次/右上角控制項共用同一排），避免文字較長時
+        // 橫向延伸到畫面兩側，蓋住切換鏡頭、除錯模式等常駐控制項。
+        if (framingIssue != FramingIssue.OK) {
+            Text(
+                text = framingIssue.message,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 32.dp)
+                    .background(Color(0xFFFF6D00).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            )
         }
 
         if (debugMode) {
