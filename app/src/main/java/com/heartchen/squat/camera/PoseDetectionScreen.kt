@@ -47,6 +47,7 @@ import com.heartchen.squat.config.Config
 import com.heartchen.squat.data.SquatDatabase
 import com.heartchen.squat.data.SquatRepRecord
 import com.heartchen.squat.debug.FrameLogger
+import com.heartchen.squat.debug.SessionExporter
 import com.heartchen.squat.pose.EmaSmoother
 import com.heartchen.squat.pose.FramingIssue
 import com.heartchen.squat.pose.KeyPoint
@@ -74,8 +75,13 @@ import java.util.concurrent.Executors
 private const val TAG = "PoseDetectionScreen"
 private const val KNEE_VALGUS_MESSAGE = "膝蓋往外一點"
 
-/** M3 流程：選模式 → 站姿校正（3 秒）→ 基準深蹲校正（2 次）→ 正式訓練。 */
-private enum class FlowStep { SELECT_MODE, STAND_HOLD, SQUAT_CALIBRATION, TRAINING }
+/**
+ * M3 流程：選模式 → 站姿校正（3 秒）→ 基準深蹲校正（2 次）→ 準備倒數（3、2、1）→ 正式訓練 → 結束。
+ *
+ * READY_COUNTDOWN 是為了把「校正的兩下」跟「正式計次的第一下」明確切開：
+ * 沒有倒數的話，使用者做完第二下校正深蹲會直接接上訓練，不知道什麼時候開始算數。
+ */
+private enum class FlowStep { SELECT_MODE, STAND_HOLD, SQUAT_CALIBRATION, READY_COUNTDOWN, TRAINING, FINISHED }
 
 /**
  * M1+M2+M3 Demo 畫面：CameraX 即時預覽 + ML Kit 骨架疊圖 + 品質過濾/EMA 平滑 +
@@ -118,6 +124,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var pendingRecord by remember { mutableStateOf<SquatRepRecord?>(null) }
     var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
+    // 準備倒數目前要顯示的大字：「準備」→「3」→「2」→「1」→「開始！」，null 表示不在倒數。
+    var readyCountdownText by remember { mutableStateOf<String?>(null) }
+    var exportFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     // 骨架疊圖一律顯示（見下方 PoseOverlay），這個開關只控制信心值數字列表跟
     // M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態），一般使用者不需要開啟。
     var debugMode by remember { mutableStateOf(false) }
@@ -195,6 +204,45 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
     }
 
+    // 校正完成 → 正式訓練之間的「準備 3 2 1 開始」倒數。
+    // 使用者站在離手機 2 公尺外，字要夠大、也要有聲音，不能只靠畫面。
+    // 用 QUEUE_FLUSH 讓每個數字蓋掉前一個，避免倒數念不完就進訓練、跟計次語音疊在一起。
+    LaunchedEffect(flowStep) {
+        if (flowStep != FlowStep.READY_COUNTDOWN) return@LaunchedEffect
+        readyCountdownText = "準備"
+        textToSpeech.value?.speak("準備", TextToSpeech.QUEUE_FLUSH, null, null)
+        delay(1000)
+        for (n in Config.READY_COUNTDOWN_SECONDS downTo 1) {
+            readyCountdownText = n.toString()
+            textToSpeech.value?.speak(n.toString(), TextToSpeech.QUEUE_FLUSH, null, null)
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            delay(1000)
+        }
+        readyCountdownText = "開始！"
+        textToSpeech.value?.speak("開始", TextToSpeech.QUEUE_FLUSH, null, null)
+        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 250)
+        delay(800)
+        readyCountdownText = null
+        flowStep = FlowStep.TRAINING
+    }
+
+    // 停止訓練：關掉逐幀 CSV（flush 到檔案）、把本次每下紀錄另外寫成一份 session CSV，
+    // 然後停在結束摘要畫面讓使用者決定要不要分享。
+    // 一併把 debugMode 關掉，維持「除錯模式開 ⇔ 有 frameLogger」的一致性；
+    // 下一輪訓練要記錄逐幀資料的話再開一次即可。
+    val stopTraining: () -> Unit = {
+        frameLogger?.close()
+        val frameCsv = frameLogger?.filePath?.let { File(it) }
+        frameLogger = null
+        debugMode = false
+        val sessionCsv = SessionExporter.writeSessionCsv(context, sessionRecords)
+        exportFiles = listOfNotNull(sessionCsv, frameCsv?.takeIf { it.exists() && it.length() > 0 })
+        depthFeedback = null
+        kneeValgusFlag = false
+        flowStep = FlowStep.FINISHED
+        textToSpeech.value?.speak("訓練結束", TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+
     DisposableEffect(previewView) {
         val pv = previewView
         if (pv == null) {
@@ -232,7 +280,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             var stateForLog = flowStep.name
 
             when (flowStep) {
-                FlowStep.SELECT_MODE -> Unit
+                // 倒數期間與結束後都不餵狀態機：倒數時使用者可能還在從校正的最後一下站起來，
+                // 結束後畫面停在摘要，兩者都不該再計次。
+                FlowStep.SELECT_MODE, FlowStep.READY_COUNTDOWN, FlowStep.FINISHED -> Unit
 
                 FlowStep.STAND_HOLD -> {
                     val hipY = averageY(smoothedByType, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP)
@@ -270,7 +320,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val scale = calibratedScale
                         if (baselineY != null && scale != null) {
                             trainingStateMachine = SquatStateMachine(baselineY, scale)
-                            flowStep = FlowStep.TRAINING
+                            // 先進倒數而不是直接開始訓練，讓使用者知道從哪一下開始算數。
+                            flowStep = FlowStep.READY_COUNTDOWN
                         }
                     }
                 }
@@ -408,7 +459,19 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 停止鍵放在這個常駐控制列，是唯一不會跟其他疊圖打架的位置：
+            // 畫面正中央被站姿倒數/準備倒數/深度回饋佔用，下方被框位警告佔用。
             if (flowStep == FlowStep.TRAINING) {
+                Text(
+                    text = "■ 停止",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(Color(0xFFD50000).copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                        .clickable { stopTraining() }
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
                 Text(
                     text = "訓練歷程",
                     color = Color.White,
@@ -497,16 +560,20 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        // 結束摘要停在畫面上時，使用者通常已經走向手機、不再站在鏡頭前，
+        // 這時候的框位警告是必然的假警報，不該再顯示或發聲。
+        val showFramingIssue = framingIssue != FramingIssue.OK && flowStep != FlowStep.FINISHED
+
         // framingIssue 已在 analyzer 內做連續幀確認，這裡只有在真的穩定改變時才會觸發，不會每幀都重複念。
-        LaunchedEffect(framingIssue) {
-            if (framingIssue != FramingIssue.OK) {
+        LaunchedEffect(framingIssue, showFramingIssue) {
+            if (showFramingIssue) {
                 textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
             }
         }
         // 放在畫面下方：StandHoldOverlay、DepthFeedbackBanner、SQUAT_CALIBRATION 的提示
         // 都是用 Alignment.Center，這裡改置中反而會互相蓋住；頂部又是訓練歷程/除錯模式的常駐 HUD。
         // 下方是唯一不會跟其他流程專屬疊圖衝突的位置。
-        if (framingIssue != FramingIssue.OK) {
+        if (showFramingIssue) {
             Text(
                 text = framingIssue.message,
                 color = Color.White,
@@ -541,11 +608,42 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     .coerceIn(0, Config.STAND_HOLD_DURATION_MS / 1000L + 1)
             )
 
+            FlowStep.READY_COUNTDOWN -> readyCountdownText?.let { ReadyCountdownOverlay(it) }
+
             FlowStep.TRAINING -> {
                 depthFeedback?.let { feedback ->
                     DepthFeedbackBanner(feedback)
                 }
             }
+
+            FlowStep.FINISHED -> SessionSummaryOverlay(
+                records = sessionRecords,
+                hasExport = exportFiles.isNotEmpty(),
+                onShare = { SessionExporter.share(context, exportFiles) },
+                onRestart = {
+                    // 回到選模式重跑一輪：站姿基準與 Duser 都要重新校正，
+                    // 因為手機位置/使用者站位很可能已經移動過了。
+                    sessionRecords = emptyList()
+                    exportFiles = emptyList()
+                    repCount = 0
+                    squatState = SquatState.STAND
+                    pendingRecord = null
+                    trainingStateMachine = null
+                    calibrationStateMachine = null
+                    calibrationDepths = emptyList()
+                    calibrationSquatState = SquatState.STAND
+                    calibratedBaselineY = null
+                    calibratedScale = null
+                    duser = null
+                    standHoldStartMs = null
+                    standHoldElapsedMs = 0L
+                    standHoldHipSum = 0f
+                    standHoldAnkleSum = 0f
+                    standHoldSampleCount = 0
+                    trainingMode = null
+                    flowStep = FlowStep.SELECT_MODE
+                }
+            )
 
             FlowStep.SQUAT_CALIBRATION -> Unit
         }
@@ -616,6 +714,119 @@ private fun StandHoldOverlay(remainingSeconds: Long) {
                 color = Color.White,
                 fontSize = 56.sp,
                 fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/**
+ * 校正完成後的「準備 3 2 1 開始」倒數。
+ *
+ * 使用者站在離手機約 2 公尺外，所以字級刻意開到很大（數字 180sp），並鋪一層半透明黑底
+ * 讓文字在任何背景/光線下都讀得到；語音由呼叫端的 LaunchedEffect 同步念出。
+ */
+@Composable
+private fun ReadyCountdownOverlay(text: String) {
+    // 純數字用最大字級，「準備」「開始！」是多個字，太大會在窄螢幕上被切掉。
+    val fontSize = if (text.length <= 1) 180.sp else 88.sp
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.45f))
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = fontSize,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = 16.dp)
+        )
+    }
+}
+
+/**
+ * 按下「停止」後的結束摘要：本次統計 + 分享研究資料。
+ *
+ * 分享一律走系統分享選單，由使用者自己挑收件者（見 [SessionExporter] 的說明），
+ * App 不會自動把資料傳給任何人。
+ */
+@Composable
+private fun SessionSummaryOverlay(
+    records: List<SquatRepRecord>,
+    hasExport: Boolean,
+    onShare: () -> Unit,
+    onRestart: () -> Unit
+) {
+    val total = records.size
+    val greenCount = records.count { it.feedbackColor == DepthFeedback.GREEN }
+    val valgusCount = records.count { it.kneeValgus }
+    val greenRatio = if (total > 0) greenCount * 100 / total else 0
+    val valgusRatio = if (total > 0) valgusCount * 100 / total else 0
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.8f))
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .background(Color(0xFF212121), RoundedCornerShape(16.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "訓練結束",
+                color = Color.White,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = "完成次數：$total", color = Color.White, fontSize = 18.sp)
+            Text(text = "深度達標比例：$greenRatio%（$greenCount/$total）", color = Color.White, fontSize = 18.sp)
+            Text(text = "膝內夾比例：$valgusRatio%（$valgusCount/$total）", color = Color.White, fontSize = 18.sp)
+
+            if (hasExport) {
+                Text(
+                    text = "分享研究資料（CSV）",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF2962FF), RoundedCornerShape(12.dp))
+                        .clickable { onShare() }
+                        .padding(vertical = 14.dp)
+                )
+                Text(
+                    text = "會開啟系統分享選單，由你自己選擇要傳給誰。\nApp 不會自動上傳或寄出任何資料。",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    text = "本次沒有完成任何一下，沒有可匯出的資料。",
+                    color = Color.Gray,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Text(
+                text = "重新開始",
+                color = Color.White,
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF424242), RoundedCornerShape(12.dp))
+                    .clickable { onRestart() }
+                    .padding(vertical = 14.dp)
             )
         }
     }

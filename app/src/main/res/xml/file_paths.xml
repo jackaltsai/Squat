@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  分享研究資料用的 FileProvider 路徑。
+  只開放 app 專屬外部儲存底下的兩個資料夾（SessionExporter 的 exports/、FrameLogger 的 debug_logs/），
+  不要用 path="." 把整個 app 目錄都暴露出去。
+-->
+<paths>
+    <external-files-path
+        name="squat_exports"
+        path="exports/" />
+    <external-files-path
+        name="squat_debug_logs"
+        path="debug_logs/" />
+    <files-path
+        name="squat_exports_internal"
+        path="exports/" />
+    <files-path
+        name="squat_debug_logs_internal"
+        path="debug_logs/" />
+</paths>

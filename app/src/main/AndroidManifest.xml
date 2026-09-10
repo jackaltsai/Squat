@@ -3,11 +3,19 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <!--
+      App 固定使用前鏡頭（使用者要看著螢幕確認姿勢與深度回饋），所以前鏡頭是硬性需求，
+      後鏡頭反而完全用不到。android.hardware.camera 在 API 21+ 專指「後鏡頭」，
+      若標成 required 會把只有前鏡頭的裝置排除在 Play 商店之外，這裡明確標為 false。
+    -->
     <uses-feature
-        android:name="android.hardware.camera"
+        android:name="android.hardware.camera.any"
         android:required="true" />
     <uses-feature
         android:name="android.hardware.camera.front"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.camera"
         android:required="false" />
 
     <application
@@ -31,6 +39,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          「分享研究資料」用：把 exports/ 的訓練紀錄 CSV 與 debug_logs/ 的逐幀 CSV
+          以 content:// URI 交給使用者選擇的 App。API 24+ 直接傳 file:// 會丟
+          FileUriExposedException，必須經由 FileProvider。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

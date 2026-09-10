@@ -29,6 +29,9 @@ object Config {
     /** M3 基準深蹲校正：需完成幾次深蹲取平均深度作為 Duser。 */
     const val CALIBRATION_SQUAT_REPS = 2
 
+    /** 校正完成後、正式訓練開始前的倒數秒數（畫面顯示大字並語音念出 3、2、1）。 */
+    const val READY_COUNTDOWN_SECONDS = 3
+
     /** 框位引導：髖-踝垂直距離佔畫面高度比例，低於此值視為拍攝距離太遠。 */
     const val FRAMING_TOO_FAR_RATIO = 0.20f
 
