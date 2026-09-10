@@ -1,23 +1,48 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。App 端修正了三輪 UI 問題（骨架疊圖一律顯示、警告訊息移到畫面下方、**改為僅使用前鏡頭並移除切換鏡頭開關**），`versionCode` 已升到 3。Closed testing 上一版 release 2 (1.0) 已上傳存檔，**卡在 Testers 名單，預計星期四才開始加測試人員**；屆時要順便把含前鏡頭修正的 3 (1.0) 重新 build 上傳。
+> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。Play Console 端只剩 Testers 名單。App 端這兩天又做了兩輪功能調整（**僅用前鏡頭**、**準備倒數 + 停止鍵 + CSV 分享**），`versionCode` 已升到 3，但**這版還沒實機測過、也還沒上傳 Play Console**。
 
 ## 📍 下次接續從這裡開始（星期四）
 
-Play Console → 這個 App → **Test and release → Testing → Closed testing → Alpha → Testers 分頁**
+### 步驟 0：先實機測新功能 ⚠️ 最優先
 
-目前進度：
-- [x] Release 已更新為 `2 (1.0)`（含前兩輪 UI bug 修正），舊的 `1 (1.0)` 已被取代
-- [ ] **`3 (1.0)` 尚未上傳**：前鏡頭修正已 commit（`35e091b`）並 push，需要在 Android Studio `git pull` → 重新 Generate Signed App Bundle → 取代目前的 release
+`f80d0d9` 這批改動**這台環境無法編譯驗證**（沒有 Android SDK），語法有逐段檢查過，但行為必須你實機跑過才能上傳。在 Android Studio `git pull` 後，Run 一次 debug build 確認：
+
+- [ ] 相機直接開前鏡頭，畫面沒有左右顛倒（骨架線要貼合身體）
+- [ ] 校正 2 下後出現 **「準備 → 3 → 2 → 1 → 開始！」**，字夠大、2 公尺外看得到，語音也念得出來
+- [ ] 倒數期間站起來**不會**被算成第一下
+- [ ] 訓練中右上角有紅色 **「■ 停止」**，且不會跟框位警告或其他提示重疊
+- [ ] 按停止 → 出現結束摘要（次數／達標比例／膝內夾比例）
+- [ ] 點 **「分享研究資料（CSV）」** → 系統分享選單正常開啟、**不會 crash**（FileProvider 設錯的話會直接閃退，這是最高風險點）
+- [ ] 寄一份給自己，確認 CSV 內容能用 Excel／pandas 正常開啟
+- [ ] 「重新開始」能乾淨回到選模式，不會殘留上一輪的次數
+
+### 步驟 1：重新 build 並上傳
+
+- [ ] Build → **Generate Signed App Bundle or APK...**（**不是** Generate Bundles）→ release
+- [ ] Play Console → **Test and release → Testing → Closed testing → Alpha → Releases**，用新的 `3 (1.0)` 取代目前存檔的 `2 (1.0)`
+
+### 步驟 2：測試人員名單
+
+Play Console → **Closed testing → Alpha → Testers 分頁**
+
 - [x] Countries/regions 已設定：Taiwan
-- [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單**（星期四從這裡繼續）
-- [ ] Testers 名單建好後，記得回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
+- [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單** ← 從這裡繼續
+- [ ] 名單建好後，回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
 - [ ] 送審通過後才會產生「Join on the web」的測試連結，分享給 12 位測試人員
 
-之後還要：
+### 之後
 1. **Closed testing** 需要至少 12 人 opted-in、連續跑滿 14 天才能申請 Production
-2. **Production** — 條件滿足後申請，届時要回答幾題關於這次封閉測試的問題
+2. **Production** — 條件滿足後申請，屆時要回答幾題關於這次封閉測試的問題
+
+### 版本對照
+
+| versionCode | 內容 | 狀態 |
+|---|---|---|
+| 1 (1.0) | 首版 | 已被取代 |
+| 2 (1.0) | 骨架疊圖一律顯示、警告訊息移到下方 | 已上傳 Closed testing，存檔中 |
+| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享** | **尚未實機測試、尚未上傳** |
 
 **這輪修的 App bug（2026-09-09）：**
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
@@ -214,3 +239,40 @@ CSV 是受試者的運動資料。依 `CLAUDE.md` 4.3 節的倫理規劃，蒐�
 - 若學校有 IRB/研究倫理審查要求，需先送審通過再蒐集
 
 Play 不會管這一塊，但論文口試會問。
+
+---
+
+## 11. 已討論但決定暫緩的項目
+
+### 台語語音（2026-09-10 評估，決定延到 1.1）
+
+**結論：不能只改一行 `Locale`，Android 內建 TTS 沒有台語。**
+
+目前 `PoseDetectionScreen.kt` 是 `tts.language = Locale.TAIWAN`（`zh-TW`，華語）。
+`TextToSpeech` 只能念「已安裝引擎支援的語言」，而 Google TTS 引擎的語言清單裡**沒有**閩南語（`nan`）。
+寫成 `Locale("nan", "TW")` 會回傳 `LANG_NOT_SUPPORTED` 然後 fallback 回華語，等於無效。
+
+| 方案 | 可行性 | 代價 |
+|---|---|---|
+| ① 靠第三方台語 TTS 引擎 | 差 | 要使用者另外裝 App + 進系統設定切換預設引擎；且多數台語 App 是「自己朗讀」而非註冊成系統 TTS engine，本 App 叫不到 |
+| ② 雲端台語 TTS API（意傳、聯經數位等） | 可行但成本高 | **會推翻已審過的宣告**：要加 `INTERNET` 權限、改隱私權政策、重填 Data safety 送審；還有即時性延遲與 API 費用 |
+| ③ **預錄台語音檔打包進 App** | ✅ 最務實 | 要準備音檔 |
+
+**建議走 ③**，理由是要念的句子數量很少且固定：
+- `深度達標！` / `再蹲深一點` / `蹲太淺了`
+- `膝蓋往外一點`
+- `請站直不動，準備校正站姿基準` / `請完成兩次深蹲，校正基準深度`
+- `準備` / `3` / `2` / `1` / `開始` / `訓練結束`
+- 框位警告訊息
+- ⚠️ **計次數字**是唯一麻煩的（目前是 `speak(sm.repCount.toString())`），要錄 1～30 或自己寫台語數字組合規則
+
+作法：音檔放 `res/raw/`，用 `SoundPool` 播放取代 `tts.speak()`。離線、零延遲、發音品質可控、**不用動隱私權政策與 Data safety**。
+
+**另一個非技術問題**：台語不是「華語漢字用台語音念」。`深度達標` 硬念會變文讀音，聽起來很生硬。真要做，句子本身要重寫成台語慣用說法，**需要懂台語的人潤稿**。
+
+**下一步（若要開始）**：可以先做不需要音檔的部分 —— 把散在各處的 `tts.speak()` 抽成一個 `VoicePrompt` 抽象層 + 「語音：華語／台語」設定開關，音檔備好再接上去。這個改動不影響現有行為，也不碰任何已審過的宣告。
+
+### 其他技術債（不影響上架）
+- `ui/theme/Color.kt` 仍是 Compose 專案範本的紫色配色，沒有配合 App 主題調整
+- `release` buildType 的 R8/ProGuard 仍關閉（`optimization.enable = false`）；若要開啟需測試 ML Kit / CameraX / Room 是否被誤刪 class
+- 商店文案未經母語人士潤稿
