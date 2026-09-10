@@ -4,6 +4,7 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -68,6 +69,7 @@ import com.heartchen.squat.squat.kneeValgusRatio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -236,6 +238,28 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         delay(800)
         readyCountdownText = null
         flowStep = FlowStep.TRAINING
+    }
+
+    // 匯出資料庫裡的全部歷史紀錄。
+    // 畫面上的訓練歷程與單場 CSV 都只看記憶體裡的本次紀錄，按「重新開始」就清空；
+    // 這條路徑直接讀 Room，救得回使用者忘記在停止後分享的那些組。
+    val exportAllHistory: () -> Unit = {
+        coroutineScope.launch {
+            val records = withContext(Dispatchers.IO) { database.squatRepDao().getAll() }
+            if (records.isEmpty()) {
+                Toast.makeText(context, "資料庫裡還沒有任何紀錄", Toast.LENGTH_SHORT).show()
+            } else {
+                val file = withContext(Dispatchers.IO) {
+                    SessionExporter.writeAllRecordsCsv(context, records)
+                }
+                if (file == null) {
+                    Toast.makeText(context, "匯出失敗", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "共 ${records.size} 筆紀錄", Toast.LENGTH_SHORT).show()
+                    SessionExporter.share(context, listOf(file))
+                }
+            }
+        }
     }
 
     // 停止訓練：關掉逐幀 CSV（flush 到檔案）、把本次每下紀錄另外寫成一份 session CSV，
@@ -644,10 +668,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         }
 
         when (flowStep) {
-            FlowStep.SELECT_MODE -> ModeSelectOverlay { mode ->
-                trainingMode = mode
-                flowStep = FlowStep.STAND_HOLD
-            }
+            FlowStep.SELECT_MODE -> ModeSelectOverlay(
+                onSelect = { mode ->
+                    trainingMode = mode
+                    flowStep = FlowStep.STAND_HOLD
+                },
+                onExportAll = exportAllHistory
+            )
 
             FlowStep.STAND_HOLD -> StandHoldOverlay(
                 remainingSeconds = ((Config.STAND_HOLD_DURATION_MS - standHoldElapsedMs) / 1000L + 1)
@@ -666,6 +693,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 records = sessionRecords,
                 hasExport = exportFiles.isNotEmpty(),
                 onShare = { SessionExporter.share(context, exportFiles) },
+                onExportAll = exportAllHistory,
                 onRestart = {
                     // 回到選模式重跑一輪：站姿基準與 Duser 都要重新校正，
                     // 因為手機位置/使用者站位很可能已經移動過了。
@@ -706,7 +734,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ModeSelectOverlay(onSelect: (TrainingMode) -> Unit) {
+private fun ModeSelectOverlay(onSelect: (TrainingMode) -> Unit, onExportAll: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -735,6 +763,17 @@ private fun ModeSelectOverlay(onSelect: (TrainingMode) -> Unit) {
                         .padding(vertical = 16.dp)
                 )
             }
+            // 起始畫面也放一個入口，是為了讓「上一組忘記按分享」的資料不用重跑一次訓練就能救回來。
+            Text(
+                text = "匯出全部歷史紀錄",
+                color = Color(0xFFB0BEC5),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onExportAll() }
+                    .padding(vertical = 8.dp)
+            )
         }
     }
 }
@@ -806,6 +845,7 @@ private fun SessionSummaryOverlay(
     records: List<SquatRepRecord>,
     hasExport: Boolean,
     onShare: () -> Unit,
+    onExportAll: () -> Unit,
     onRestart: () -> Unit
 ) {
     val total = records.size
@@ -864,6 +904,24 @@ private fun SessionSummaryOverlay(
                     textAlign = TextAlign.Center
                 )
             }
+
+            Text(
+                text = "匯出全部歷史紀錄",
+                color = Color.White,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF00695C), RoundedCornerShape(12.dp))
+                    .clickable { onExportAll() }
+                    .padding(vertical = 12.dp)
+            )
+            Text(
+                text = "包含之前每一組的紀錄，不只這一組",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center
+            )
 
             Text(
                 text = "重新開始",

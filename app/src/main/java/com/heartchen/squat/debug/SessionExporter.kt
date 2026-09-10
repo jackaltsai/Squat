@@ -39,10 +39,20 @@ object SessionExporter {
      * dNow / duser 兩欄是 depthRatio（p）的分子與分母，kneeValgusRatio 是膝內夾的原始比值。
      * 只存判定結果的話，事後無法分辨「p 偏高」是蹲得深還是校正基準太淺，也無法重新掃描門檻。
      */
-    fun writeSessionCsv(context: Context, records: List<SquatRepRecord>): File? {
+    fun writeSessionCsv(context: Context, records: List<SquatRepRecord>): File? =
+        writeCsv(context, records, "squat_session")
+
+    /**
+     * 寫出資料庫裡的**全部**歷史紀錄。欄位跟單場 CSV 完全相同，方便同一支分析腳本處理；
+     * 不同場次靠 timestamp 的間隔區分（見 tools/analyze_sessions.py）。
+     */
+    fun writeAllRecordsCsv(context: Context, records: List<SquatRepRecord>): File? =
+        writeCsv(context, records, "squat_all_records")
+
+    private fun writeCsv(context: Context, records: List<SquatRepRecord>, prefix: String): File? {
         if (records.isEmpty()) return null
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val file = File(exportDir(context), "squat_session_$stamp.csv")
+        val file = File(exportDir(context), "${prefix}_$stamp.csv")
         return try {
             file.bufferedWriter().use { writer ->
                 writer.write(
@@ -69,10 +79,10 @@ object SessionExporter {
                     writer.newLine()
                 }
             }
-            Log.i(TAG, "Session CSV written: ${file.absolutePath}")
+            Log.i(TAG, "CSV written: ${file.absolutePath} (${records.size} rows)")
             file
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to write session CSV", e)
+            Log.e(TAG, "Failed to write CSV", e)
             null
         }
     }

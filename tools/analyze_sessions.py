@@ -27,10 +27,29 @@ THRESHOLDS = {
 # 平均 p 落在這個範圍外，代表校正基準跟實際訓練深度落差太大，該場資料要打問號
 SUSPECT_MEAN_P_LOW, SUSPECT_MEAN_P_HIGH = 0.85, 1.15
 
+# squat_all_records_*.csv 把所有場次倒在同一個檔案裡，用相鄰兩下的時間間隔切開。
+# 一場訓練裡每下大約隔 3~10 秒，換場至少要重做站姿校正 3 秒 + 兩下校正深蹲 + 倒數，
+# 120 秒是保守的分界。
+SESSION_GAP_SECONDS = 120
+
 
 def expected_color(p, mode):
     green, yellow = THRESHOLDS[mode]
     return "GREEN" if p >= green else ("YELLOW" if p >= yellow else "RED")
+
+
+def split_sessions(df):
+    """把單一檔案內的紀錄依時間間隔切成場次，回傳 [(標籤, 子 DataFrame), ...]。"""
+    df = df.sort_values("timestampMs").reset_index(drop=True)
+    gap = df["timestampMs"].diff().fillna(0) / 1000
+    # 時間隔太久，或訓練模式換了，都視為新的一場
+    new_session = (gap > SESSION_GAP_SECONDS) | (df["mode"] != df["mode"].shift())
+    df = df.assign(_session=new_session.cumsum())
+    out = []
+    for i, (_, d) in enumerate(df.groupby("_session"), start=1):
+        label = f"{d['sourceFile'].iloc[0]} #{i} ({d['localTime'].iloc[0]})"
+        out.append((label, d))
+    return out
 
 
 def collect(paths):
@@ -56,7 +75,11 @@ def main():
     df = collect(sys.argv[1:])
     has_raw = "duser" in df.columns
 
-    for name, d in df.groupby("sourceFile", sort=True):
+    sessions = []
+    for _, per_file in df.groupby("sourceFile", sort=True):
+        sessions += split_sessions(per_file)
+
+    for name, d in sessions:
         mode = d["mode"].iloc[0]
         p = d["depthRatio"]
         green, yellow = THRESHOLDS[mode]
@@ -87,12 +110,20 @@ def main():
             print("  ⚠️  這份 CSV 沒有 duser / dNow 欄位（v3 以前的舊格式），無法診斷校正品質")
 
     print("\n\n=== 全部場次摘要 ===")
-    agg = {"mode": ("mode", "first"), "次數": ("depthRatio", "size"),
-           "p平均": ("depthRatio", "mean"), "p標準差": ("depthRatio", "std"),
-           "膝內夾": ("kneeValgus", "sum")}
-    if has_raw:
-        agg["Duser"] = ("duser", "first")
-    print(df.groupby("sourceFile").agg(**agg).round(3).to_string())
+    rows = []
+    for name, d in sessions:
+        row = {
+            "場次": name,
+            "模式": d["mode"].iloc[0],
+            "次數": len(d),
+            "p平均": round(d["depthRatio"].mean(), 3),
+            "p標準差": round(d["depthRatio"].std(), 3),
+            "膝內夾": int(d["kneeValgus"].sum()),
+        }
+        if has_raw and d["duser"].notna().any():
+            row["Duser"] = round(d["duser"].dropna().iloc[0], 4)
+        rows.append(row)
+    print(pd.DataFrame(rows).to_string(index=False))
 
 
 if __name__ == "__main__":
