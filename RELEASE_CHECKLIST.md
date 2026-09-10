@@ -1,7 +1,7 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。Play Console 端只剩 Testers 名單。App 端這兩天做的兩輪功能調整（**僅用前鏡頭**、**準備倒數 + 停止鍵 + CSV 分享**）已 **實機測試通過**，`versionCode` 3 待重新 build 並上傳。
+> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。Play Console 端只剩 Testers 名單。App 端這兩天做了三輪調整（**僅用前鏡頭**、**準備倒數 + 停止鍵 + CSV 分享**、**CSV 原始值欄位 + 校正品質檢查**）。前兩輪已實機測試通過，第三輪待補測。`versionCode` 3 尚未上傳過，全部內容會合併成同一版上傳。
 
 ## 📍 下次接續從這裡開始（星期四）
 
@@ -18,7 +18,18 @@
 - [x] CSV 內容可正常開啟
 - [x] 「重新開始」乾淨回到選模式
 
-### 步驟 1：重新 build 並上傳 ← 從這裡繼續
+### 步驟 0b：補測 v4 那批改動（commit `24b2460`）⚠️ 先做這個
+
+這批也是這台環境無法編譯驗證的，而且動到 **Room 資料庫結構**，風險比前一批高：
+
+- [ ] **Room migration（最高風險）**：手機上先留著**舊版**（已經有訓練紀錄的那版），直接**覆蓋安裝**新版 → 開啟訓練歷程，確認**不 crash、舊紀錄還在**
+  - ⚠️ 全新安裝（先解除安裝再裝）**測不出** migration 問題，一定要覆蓋安裝
+- [ ] **校正退回**：故意一下蹲很深、一下只半蹲 → 確認被退回、有橘色提示、**有語音**
+- [ ] **連續失敗放行**：連續 3 次都做不一致 → 確認第 3 次會放行進入準備倒數，不會卡死
+- [ ] **CSV 新欄位**：跑完一組後匯出，確認多了 `dNow` / `duser` / `kneeValgusRatio` 三欄且有數值
+- [ ] 用 `python3 tools/analyze_sessions.py <資料夾>` 跑一次，確認能讀且會印出 Duser
+
+### 步驟 1：重新 build 並上傳
 
 - [ ] Build → **Generate Signed App Bundle or APK...**（**不是** Generate Bundles）→ release
 - [ ] Play Console → **Test and release → Testing → Closed testing → Alpha → Releases**，用新的 `3 (1.0)` 取代目前存檔的 `2 (1.0)`
@@ -42,7 +53,7 @@ Play Console → **Closed testing → Alpha → Testers 分頁**
 |---|---|---|
 | 1 (1.0) | 首版 | 已被取代 |
 | 2 (1.0) | 骨架疊圖一律顯示、警告訊息移到下方 | 已上傳 Closed testing，存檔中 |
-| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享** | ✅ 實機測試通過，**待 build 上傳** |
+| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查** | 部分已測，**待補測後 build 上傳** |
 
 **這輪修的 App bug（2026-09-09）：**
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
