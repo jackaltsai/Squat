@@ -1,24 +1,24 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。Play Console 端只剩 Testers 名單。App 端這兩天又做了兩輪功能調整（**僅用前鏡頭**、**準備倒數 + 停止鍵 + CSV 分享**），`versionCode` 已升到 3，但**這版還沒實機測過、也還沒上傳 Play Console**。
+> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。Play Console 端只剩 Testers 名單。App 端這兩天做的兩輪功能調整（**僅用前鏡頭**、**準備倒數 + 停止鍵 + CSV 分享**）已 **實機測試通過**，`versionCode` 3 待重新 build 並上傳。
 
 ## 📍 下次接續從這裡開始（星期四）
 
-### 步驟 0：先實機測新功能 ⚠️ 最優先
+### ~~步驟 0：實機測試~~ ✅ 已於 2026-09-10 完成
 
-`f80d0d9` 這批改動**這台環境無法編譯驗證**（沒有 Android SDK），語法有逐段檢查過，但行為必須你實機跑過才能上傳。在 Android Studio `git pull` 後，Run 一次 debug build 確認：
+`f80d0d9` 這批改動這台環境無法編譯驗證（沒有 Android SDK），已由本人實機跑過 debug build 確認：
 
-- [ ] 相機直接開前鏡頭，畫面沒有左右顛倒（骨架線要貼合身體）
-- [ ] 校正 2 下後出現 **「準備 → 3 → 2 → 1 → 開始！」**，字夠大、2 公尺外看得到，語音也念得出來
-- [ ] 倒數期間站起來**不會**被算成第一下
-- [ ] 訓練中右上角有紅色 **「■ 停止」**，且不會跟框位警告或其他提示重疊
-- [ ] 按停止 → 出現結束摘要（次數／達標比例／膝內夾比例）
-- [ ] 點 **「分享研究資料（CSV）」** → 系統分享選單正常開啟、**不會 crash**（FileProvider 設錯的話會直接閃退，這是最高風險點）
-- [ ] 寄一份給自己，確認 CSV 內容能用 Excel／pandas 正常開啟
-- [ ] 「重新開始」能乾淨回到選模式，不會殘留上一輪的次數
+- [x] 相機直接開前鏡頭，畫面沒有左右顛倒（骨架線貼合身體）
+- [x] 校正 2 下後出現 **「準備 → 3 → 2 → 1 → 開始！」**，字夠大、2 公尺外看得到，語音正常
+- [x] 倒數期間站起來不會被算成第一下
+- [x] 訓練中右上角紅色 **「■ 停止」**，不會跟框位警告或其他提示重疊
+- [x] 按停止 → 出現結束摘要（次數／達標比例／膝內夾比例）
+- [x] 點 **「分享研究資料（CSV）」** → 系統分享選單正常開啟，**FileProvider 沒有閃退**
+- [x] CSV 內容可正常開啟
+- [x] 「重新開始」乾淨回到選模式
 
-### 步驟 1：重新 build 並上傳
+### 步驟 1：重新 build 並上傳 ← 從這裡繼續
 
 - [ ] Build → **Generate Signed App Bundle or APK...**（**不是** Generate Bundles）→ release
 - [ ] Play Console → **Test and release → Testing → Closed testing → Alpha → Releases**，用新的 `3 (1.0)` 取代目前存檔的 `2 (1.0)`
@@ -28,7 +28,7 @@
 Play Console → **Closed testing → Alpha → Testers 分頁**
 
 - [x] Countries/regions 已設定：Taiwan
-- [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單** ← 從這裡繼續
+- [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單**
 - [ ] 名單建好後，回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
 - [ ] 送審通過後才會產生「Join on the web」的測試連結，分享給 12 位測試人員
 
@@ -42,7 +42,7 @@ Play Console → **Closed testing → Alpha → Testers 分頁**
 |---|---|---|
 | 1 (1.0) | 首版 | 已被取代 |
 | 2 (1.0) | 骨架疊圖一律顯示、警告訊息移到下方 | 已上傳 Closed testing，存檔中 |
-| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享** | **尚未實機測試、尚未上傳** |
+| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享** | ✅ 實機測試通過，**待 build 上傳** |
 
 **這輪修的 App bug（2026-09-09）：**
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
