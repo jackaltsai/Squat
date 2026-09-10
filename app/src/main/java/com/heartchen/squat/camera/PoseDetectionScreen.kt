@@ -114,6 +114,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var calibrationStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
     var calibrationSquatState by remember { mutableStateOf(SquatState.STAND) }
     var calibrationDepths by remember { mutableStateOf<List<Float>>(emptyList()) }
+    // 校正品質檢查：兩下校正深蹲深度差太多就要求重做，避免試探性的淺蹲把 Duser 拉低。
+    var calibrationRetryCount by remember { mutableIntStateOf(0) }
+    var calibrationWarning by remember { mutableStateOf<String?>(null) }
 
     var trainingStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
     var duser by remember { mutableStateOf<Float?>(null) }
@@ -202,6 +205,15 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             else -> null
         }
         message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
+    }
+
+    // 校正被判定不一致而要求重做時，語音講一次（使用者離手機遠，只看文字可能沒注意到）。
+    // key 用 retryCount 而不是 warning 字串：連續兩次被退回時訊息內容相同，
+    // 以字串當 key 的話 LaunchedEffect 不會重跑，第二次就不會出聲。
+    LaunchedEffect(calibrationRetryCount) {
+        if (calibrationRetryCount > 0) {
+            calibrationWarning?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_FLUSH, null, null) }
+        }
     }
 
     // 校正完成 → 正式訓練之間的「準備 3 2 1 開始」倒數。
@@ -315,10 +327,27 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         }
                     }
                     if (newState == SquatState.STAND && calibrationDepths.size >= Config.CALIBRATION_SQUAT_REPS) {
-                        duser = calibrationDepths.takeLast(Config.CALIBRATION_SQUAT_REPS).average().toFloat()
+                        val depths = calibrationDepths.takeLast(Config.CALIBRATION_SQUAT_REPS)
+                        val mean = depths.average().toFloat()
+                        // 全距除以平均：兩下差太多代表其中一下是試探性的淺蹲，取平均當 Duser 不可信。
+                        val spread = if (mean > 0f) (depths.max() - depths.min()) / mean else 0f
                         val baselineY = calibratedBaselineY
                         val scale = calibratedScale
-                        if (baselineY != null && scale != null) {
+                        if (spread > Config.CALIBRATION_MAX_DEPTH_SPREAD &&
+                            calibrationRetryCount < Config.CALIBRATION_MAX_RETRIES &&
+                            baselineY != null && scale != null
+                        ) {
+                            Log.w(TAG, "Calibration rejected: depths=$depths spread=$spread")
+                            calibrationRetryCount += 1
+                            calibrationDepths = emptyList()
+                            calibrationSquatState = SquatState.STAND
+                            calibrationStateMachine = SquatStateMachine(baselineY, scale)
+                            calibrationWarning = "兩次深蹲深度差太多，請重做兩次一樣深的深蹲"
+                        } else if (baselineY != null && scale != null) {
+                            // 重試次數用完仍不一致就照收，避免使用者卡在校正出不去；
+                            // Duser 會寫進每筆紀錄的 CSV，事後分析看得出這場校正品質不佳。
+                            duser = mean
+                            calibrationWarning = null
                             trainingStateMachine = SquatStateMachine(baselineY, scale)
                             // 先進倒數而不是直接開始訓練，讓使用者知道從哪一下開始算數。
                             flowStep = FlowStep.READY_COUNTDOWN
@@ -338,18 +367,23 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val mode = trainingMode
                         val dUser = duser
                         val kneeValgus = detectKneeValgus(smoothedByType)
+                        val valgusRatio = kneeValgusRatio(smoothedByType)
                         kneeValgusFlag = kneeValgus == true
-                        Log.d(TAG, "kneeValgusRatio=${kneeValgusRatio(smoothedByType)} kneeValgus=$kneeValgus")
+                        Log.d(TAG, "kneeValgusRatio=$valgusRatio kneeValgus=$kneeValgus")
                         if (dNow != null && mode != null && dUser != null && dUser > 0f) {
                             val p = dNow / dUser
                             val feedback = evaluateDepthFeedback(p, mode)
                             depthFeedback = feedback
+                            // dNow / dUser / valgusRatio 是門檻判定前的原始值，一併留存供 M5 重新掃描門檻。
                             pendingRecord = SquatRepRecord(
                                 timestamp = System.currentTimeMillis(),
                                 depthRatio = p,
                                 kneeValgus = kneeValgus == true,
                                 feedbackColor = feedback,
-                                mode = mode
+                                mode = mode,
+                                dNow = dNow,
+                                duser = dUser,
+                                kneeValgusRatio = valgusRatio
                             )
                         }
                     }
@@ -554,6 +588,18 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                             .padding(horizontal = 20.dp, vertical = 10.dp)
                     )
+                    calibrationWarning?.let { warning ->
+                        Text(
+                            text = warning,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .background(Color(0xFFFF6D00).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
 
                 else -> Unit
@@ -632,6 +678,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     calibrationStateMachine = null
                     calibrationDepths = emptyList()
                     calibrationSquatState = SquatState.STAND
+                    calibrationRetryCount = 0
+                    calibrationWarning = null
                     calibratedBaselineY = null
                     calibratedScale = null
                     duser = null

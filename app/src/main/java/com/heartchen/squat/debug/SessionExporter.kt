@@ -35,6 +35,9 @@ object SessionExporter {
     /**
      * 寫出本次訓練的每下紀錄 CSV。欄位刻意保持扁平、無引號跳脫需求（列舉值與數字），
      * 可直接用 pandas.read_csv 讀取比對人工標註。
+     *
+     * dNow / duser 兩欄是 depthRatio（p）的分子與分母，kneeValgusRatio 是膝內夾的原始比值。
+     * 只存判定結果的話，事後無法分辨「p 偏高」是蹲得深還是校正基準太淺，也無法重新掃描門檻。
      */
     fun writeSessionCsv(context: Context, records: List<SquatRepRecord>): File? {
         if (records.isEmpty()) return null
@@ -42,7 +45,10 @@ object SessionExporter {
         val file = File(exportDir(context), "squat_session_$stamp.csv")
         return try {
             file.bufferedWriter().use { writer ->
-                writer.write("repIndex,timestampMs,localTime,mode,depthRatio,feedbackColor,kneeValgus")
+                writer.write(
+                    "repIndex,timestampMs,localTime,mode," +
+                        "dNow,duser,depthRatio,feedbackColor,kneeValgusRatio,kneeValgus"
+                )
                 writer.newLine()
                 val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
                 records.forEachIndexed { index, record ->
@@ -52,8 +58,11 @@ object SessionExporter {
                             record.timestamp.toString(),
                             timeFormat.format(Date(record.timestamp)),
                             record.mode.name,
+                            record.dNow?.toString().orEmpty(),
+                            record.duser?.toString().orEmpty(),
                             record.depthRatio.toString(),
                             record.feedbackColor.name,
+                            record.kneeValgusRatio?.toString().orEmpty(),
                             record.kneeValgus.toString()
                         ).joinToString(",")
                     )
