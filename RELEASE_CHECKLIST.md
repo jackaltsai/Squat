@@ -1,9 +1,11 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。Play Console 端只剩 Testers 名單。App 端這兩天做了三輪調整（**僅用前鏡頭**、**準備倒數 + 停止鍵 + CSV 分享**、**CSV 原始值欄位 + 校正品質檢查**）。三輪皆已實機測試通過。`versionCode` 3 尚未上傳過，全部內容合併成同一版上傳。實測資料另外揭露兩個演算法問題，見第 12 節（不影響上架，列為 v4）。
+> 目前狀態（2026-09-10）：**14 項變更已全部送審，狀態 Changes in review。等 Google 審核結果。**
+> App 端三輪調整（僅前鏡頭／準備倒數＋停止鍵＋CSV 分享／CSV 原始值欄位＋校正品質檢查）皆已實機測試通過，合併為 `versionCode 3` 上傳。
+> 招募文已備妥（`docs/THREADS_RECRUITMENT.md`），**只差審核通過後的 opt-in 連結**。
 
-## 📍 下次接續從這裡開始（星期四）
+## 📍 下次接續從這裡開始：**等審核通過後**
 
 ### ~~步驟 0：實機測試~~ ✅ 已於 2026-09-10 完成
 
@@ -26,24 +28,43 @@
 - [x] **校正一致性檢查有作用**：相隔 90 秒的兩場，Duser = 0.1919 vs 0.1806，**只差 6.3%**（改版前是 0.98 vs 1.25 的天差地遠）
 - [x] **分級邏輯**：187 筆全部重算相符
 
-### 步驟 1：重新 build 並上傳 ← 從這裡繼續
+### ~~步驟 1：build 並上傳~~ ✅ 已完成
 
-- [ ] Build → **Generate Signed App Bundle or APK...**（**不是** Generate Bundles）→ release
-- [ ] Play Console → **Test and release → Testing → Closed testing → Alpha → Releases**，用新的 `3 (1.0)` 取代目前存檔的 `2 (1.0)`
+- [x] Generate Signed App Bundle → release，`3 (1.0)`，24.1 MB
+- [x] 上傳取代 Closed testing 的 `2 (1.0)`
+- [x] 4 個 device support 警告已確認為**預期內**：改用前鏡頭後排除沒有前鏡頭的裝置（Phone −177／Tablet −126／Car 歸零），同時因為後鏡頭改為非必要而新增裝置（Chromebook 10 → 69）。淨損約 1%，換掉的是「裝了也不能用」的裝置
 
-### 步驟 2：測試人員名單
+### ~~步驟 2：測試人員設定~~ ✅ 已完成並送審
 
-Play Console → **Closed testing → Alpha → Testers 分頁**
-
-- [x] Countries/regions 已設定：Taiwan
+- [x] Countries/regions：Taiwan
 - [x] **改用 Google Groups，不用 Email lists**（理由見下方「為什麼是 Google Group」）
   - 群組：`squat-coach-testers@googlegroups.com`
   - 權限：**所有人皆可加入**；查看成員／張貼內容／查看會話一律限**版主**
   - Feedback 信箱：`hata.s520@gmail.com`
-- [ ] **Publishing overview → Send changes for review**（release 3 + Taiwan + Testers 群組一起送）
-- [ ] 送審通過後「Join on the web」的 Copy link 才會亮起，取得 opt-in 連結
-- [ ] 自己先用**非開發者帳號**（`hata.s520@gmail.com`）走完整動線：加入群組 → 開 opt-in 連結 → 點「成為測試人員」→ 從 Play 商店安裝
-- [ ] 在 Threads 公開招募 12 位測試者
+- [x] **已送審 14 項變更**，狀態 `Changes in review`（Managed publishing off，通過後自動生效）
+
+---
+
+### ⏳ 步驟 3：等審核通過 ← **現在卡在這裡**
+
+Google 會寄信通知，首次送封閉測試通常幾小時到幾天。審核期間 Play Console 不用動。
+
+通過後依序做：
+
+- [ ] Closed testing → Alpha → Testers → **Copy link** 取得 opt-in 連結
+      （格式通常是 `https://play.google.com/apps/testing/com.heartchen.squat`，**以 Play Console 顯示的為準**）
+- [ ] 把連結填進 `docs/THREADS_RECRUITMENT.md` 的 `<OPT_IN_LINK>` 佔位符
+- [ ] **用無痕視窗**把 opt-in 連結與群組連結各點一次，確認陌生人真的打得開（不是只有你登入時才行）
+- [ ] 自己用**非開發者帳號**（`hata.s520@gmail.com`）走完整動線：加入群組 → opt-in → 點「成為測試人員」→ 從 Play 商店安裝
+- [ ] 生 QR code 與招募圖（App 截圖 + 三步驟 + QR）
+- [ ] 在 Threads 發文招募 12 位
+
+### 步驟 4：盯住 opt-in 人數
+
+- [ ] **≥12 人完成 opt-in**（加入群組 ≠ opt-in，見下方說明）
+- [ ] 從人數達標起算，連續 **14 天**
+- [ ] 期間留意 Pre-launch report 有無 crash
+- [ ] 條件滿足後 Apply for production
 
 ### 為什麼是 Google Group 而不是 Email list
 
@@ -83,7 +104,7 @@ Play Console → **Closed testing → Alpha → Testers 分頁**
 |---|---|---|
 | 1 (1.0) | 首版 | 已被取代 |
 | 2 (1.0) | 骨架疊圖一律顯示、警告訊息移到下方 | 已上傳 Closed testing，存檔中 |
-| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查、匯出全部歷史** | ✅ 實機測試全數通過，**待 build 上傳** |
+| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查、匯出全部歷史** | ✅ 已上傳並送審，**審核中** |
 
 **這輪修的 App bug（2026-09-09）：**
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
@@ -366,3 +387,25 @@ Play 不會管這一塊，但論文口試會問。
 
 **v4 修法**：文案改成明確指示深度，例如「**請用你平常訓練的深度**，完成兩次深蹲」。
 （`duser` 現已寫入 CSV，事後仍可用 `tools/analyze_sessions.py` 把平均 p 偏離 1 的場次標出來複核。）
+
+---
+
+## 13. 審核期間可以做／刻意不做的事（2026-09-10）
+
+### 已備妥、等連結就能用
+- `docs/THREADS_RECRUITMENT.md` —— 主文、步驟留言、補充留言、人數卡住時的追蹤留言，以及發文前檢查與「不要寫的內容」（不得提供報酬／不得說裝了就好／不得請人新辦帳號）
+- 待補：`<OPT_IN_LINK>` 佔位符
+
+### 刻意**不**做：v4 膝內夾修正
+第 12 節的問題 A 結論已撤回。在拿到**逐下標註的 ground truth** 之前不動 `KneeValgus.kt` —— 沒有驗證集就改公式，等於用猜的換掉一個目前沒有證據說它壞掉的東西。
+
+要推進這件事，需要的是**資料**不是程式碼：
+1. 錄一組 10～20 下，**逐下記錄「正常」或「故意內夾」**
+2. 匯出 CSV，用 `kneeValgusRatio` 欄位掃描候選門檻，算 Accuracy / F1
+3. 屆時再判斷該調門檻還是改公式
+
+### 其他技術債（不影響上架）
+- `ui/theme/Color.kt` 仍是 Compose 範本紫色配色
+- `release` buildType 的 R8/ProGuard 仍關閉（`optimization.enable = false`）
+- 商店文案未經母語人士潤稿
+- 金鑰備份到第二個安全位置 —— **尚未確認完成**（第 2 節）
