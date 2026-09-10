@@ -87,7 +87,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    // 固定用前鏡頭：深蹲過程中使用者要看著螢幕確認自己的姿勢與綠/黃/紅回饋，
+    // 用後鏡頭就等於背對畫面，看不到任何提示，所以不提供前後鏡頭切換。
+    val lensFacing = CameraSelector.LENS_FACING_FRONT
     var poseFrame by remember { mutableStateOf<PoseFrame?>(null) }
     var previewViewSize by remember { mutableStateOf(IntSize.Zero) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
@@ -193,7 +195,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
     }
 
-    DisposableEffect(lensFacing, previewView) {
+    DisposableEffect(previewView) {
         val pv = previewView
         if (pv == null) {
             return@DisposableEffect onDispose {}
@@ -406,25 +408,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 切換鏡頭只在一開始選模式時需要（架好手機、決定前/後鏡頭），
-            // 訓練開始後沒人會中途去點這個，常駐顯示只會佔位、增加跟其他提示重疊的機會。
-            if (flowStep == FlowStep.SELECT_MODE) {
-                Text(
-                    text = "切換鏡頭",
-                    color = Color.White,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .clickable {
-                            lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                                CameraSelector.LENS_FACING_FRONT
-                            } else {
-                                CameraSelector.LENS_FACING_BACK
-                            }
-                        }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
             if (flowStep == FlowStep.TRAINING) {
                 Text(
                     text = "訓練歷程",
@@ -521,7 +504,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
         }
         // 放在畫面下方：StandHoldOverlay、DepthFeedbackBanner、SQUAT_CALIBRATION 的提示
-        // 都是用 Alignment.Center，這裡改置中反而會互相蓋住；頂部又是切換鏡頭/除錯模式的常駐 HUD。
+        // 都是用 Alignment.Center，這裡改置中反而會互相蓋住；頂部又是訓練歷程/除錯模式的常駐 HUD。
         // 下方是唯一不會跟其他流程專屬疊圖衝突的位置。
         if (framingIssue != FramingIssue.OK) {
             Text(
