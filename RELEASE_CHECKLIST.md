@@ -1,14 +1,15 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-09）：**「Finish setting up your app」100% 完成**。App 端修正了兩輪 UI bug（骨架疊圖一律顯示、警告訊息跟頂部 HUD 重疊 → 移到畫面下方、切換鏡頭只在選模式畫面顯示），`versionCode` 已升到 2。Closed testing 的 release 2 (1.0) 已上傳存檔，**卡在 Testers 名單，預計星期四才開始加測試人員**。
+> 目前狀態（2026-09-10）：**「Finish setting up your app」100% 完成**。App 端修正了三輪 UI 問題（骨架疊圖一律顯示、警告訊息移到畫面下方、**改為僅使用前鏡頭並移除切換鏡頭開關**），`versionCode` 已升到 3。Closed testing 上一版 release 2 (1.0) 已上傳存檔，**卡在 Testers 名單，預計星期四才開始加測試人員**；屆時要順便把含前鏡頭修正的 3 (1.0) 重新 build 上傳。
 
 ## 📍 下次接續從這裡開始（星期四）
 
 Play Console → 這個 App → **Test and release → Testing → Closed testing → Alpha → Testers 分頁**
 
 目前進度：
-- [x] Release 已更新為 `2 (1.0)`（含最新兩輪 UI bug 修正），舊的 `1 (1.0)` 已被取代
+- [x] Release 已更新為 `2 (1.0)`（含前兩輪 UI bug 修正），舊的 `1 (1.0)` 已被取代
+- [ ] **`3 (1.0)` 尚未上傳**：前鏡頭修正已 commit（`35e091b`）並 push，需要在 Android Studio `git pull` → 重新 Generate Signed App Bundle → 取代目前的 release
 - [x] Countries/regions 已設定：Taiwan
 - [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單**（星期四從這裡繼續）
 - [ ] Testers 名單建好後，記得回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
@@ -22,6 +23,11 @@ Play Console → 這個 App → **Test and release → Testing → Closed testin
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
 - 「偵測不到人/腳踝」等警告訊息原本跟頂部右上角控制項（切換鏡頭、除錯模式）重疊，後來又發現置中會跟站姿校正倒數、深度回饋等疊圖衝突，最後改放在畫面**下方**才不會跟任何東西相撞
 - 「切換鏡頭」從常駐顯示改成只在**選擇訓練模式**畫面出現（訓練開始後不會有人中途切鏡頭）
+
+**這輪修的 App 調整（2026-09-10，commit `35e091b`）：**
+- **改為固定使用前鏡頭，「切換鏡頭」開關整個移除**。理由：深度回饋顏色、校正倒數、框取警告全都只出現在螢幕上，用後鏡頭等於背對畫面、什麼提示都看不到，這個選項對使用者沒有實際價值
+- `isFrontCamera` 的鏡像處理（`PoseAnalyzer` → `PoseFrame` → `PoseOverlay`）保留不動
+- `versionCode` 2 → 3（2 已被 Play Console 佔用）
 
 詳見下方第 8 節。
 
