@@ -36,9 +36,42 @@
 Play Console → **Closed testing → Alpha → Testers 分頁**
 
 - [x] Countries/regions 已設定：Taiwan
-- [ ] **Testers 分頁**：已選 **Email lists**，但**還沒點 "Create email list" 建立名單**
-- [ ] 名單建好後，回到 **Publishing overview** 點 **Send changes for review**，把 release + 國家 + 測試人員設定一起送審
-- [ ] 送審通過後才會產生「Join on the web」的測試連結，分享給 12 位測試人員
+- [x] **改用 Google Groups，不用 Email lists**（理由見下方「為什麼是 Google Group」）
+  - 群組：`squat-coach-testers@googlegroups.com`
+  - 權限：**所有人皆可加入**；查看成員／張貼內容／查看會話一律限**版主**
+  - Feedback 信箱：`hata.s520@gmail.com`
+- [ ] **Publishing overview → Send changes for review**（release 3 + Taiwan + Testers 群組一起送）
+- [ ] 送審通過後「Join on the web」的 Copy link 才會亮起，取得 opt-in 連結
+- [ ] 自己先用**非開發者帳號**（`hata.s520@gmail.com`）走完整動線：加入群組 → 開 opt-in 連結 → 點「成為測試人員」→ 從 Play 商店安裝
+- [ ] 在 Threads 公開招募 12 位測試者
+
+### 為什麼是 Google Group 而不是 Email list
+
+| | Email list | Google Group |
+|---|---|---|
+| 公開招募 | ❌ 只有名單上的 email 能 opt in，得先私訊蒐集陌生人 Gmail | ✅ 貼連結就好，不碰個資 |
+| 中途加人 | ❌ **上傳新 CSV 會覆蓋舊名單、切斷現有 opt-in、14 天倒數歸零** | ✅ 只管理群組成員，Play Console 不用動，計時不中斷 |
+
+### Threads 招募注意事項（會導致帳號停權的紅線）
+
+- ❌ 假帳號 / 模擬器湊人數 —— Play Services 會做硬體檢查（x86 偽裝 ARM、缺加速度計），抓到是**開發者帳號記點**
+- ❌ 付費買測試者、tester exchange 互測交換
+- ⚠️ 請人「為了測試新辦 Gmail」—— Google 依帳號歷史給 trust weight，burner 帳號可能不採計
+- ✅ 發文務必寫明：**請用你平常在用的 Google 帳號**
+
+### 🔑 最常見的卡關：加入群組 ≠ 已 opt in
+
+加進群組只是取得資格。每個人**必須自己**打開 opt-in 連結 → 登入 → 點「成為測試人員」，沒點就不算數，Play Console 會一直顯示「Have at least 12 testers opted-in」。招募文一定要把這步寫清楚。
+
+### ⚠️ 兩批人不要混淆
+
+| | Threads 脆友 | 論文受試者 |
+|---|---|---|
+| 目的 | 湊滿 Play 的 12人14天 | 蒐集研究資料 |
+| 人數 | ≥12（建議不把自己算進去） | 約 30 |
+| 需要 | 裝了、開來用過 | **知情同意書**、統一拍攝距離/高度/光照/背景 |
+
+脆友的資料**不可當論文數據** —— 沒有同意書、拍攝條件不受控。
 
 ### 之後
 1. **Closed testing** 需要至少 12 人 opted-in、連續跑滿 14 天才能申請 Production
