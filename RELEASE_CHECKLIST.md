@@ -1,11 +1,11 @@
 # Google Play 上架前準備清單
 
 > 適用專案：深蹲智慧健身輔助系統（`com.heartchen.squat`）
-> 目前狀態（2026-09-10）：**14 項變更已全部送審，狀態 Changes in review。等 Google 審核結果。**
-> App 端三輪調整（僅前鏡頭／準備倒數＋停止鍵＋CSV 分享／CSV 原始值欄位＋校正品質檢查）皆已實機測試通過，合併為 `versionCode 3` 上傳。
-> 招募文已備妥（`docs/THREADS_RECRUITMENT.md`），**只差審核通過後的 opt-in 連結**。
+> 目前狀態（2026-09-11）：**審核已通過，Threads 招募文已發出。現在等測試人員 opt-in。**
+> `versionCode 3` 已發布到 Closed testing - Alpha，測試連結已生效。
+> **下一個里程碑：12 人完成 opt-in → 連續 14 天 → 申請 Production。**
 
-## 📍 下次接續從這裡開始：**等審核通過後**
+## 📍 下次接續從這裡開始：**盯 opt-in 人數**
 
 ### ~~步驟 0：實機測試~~ ✅ 已於 2026-09-10 完成
 
@@ -45,26 +45,40 @@
 
 ---
 
-### ⏳ 步驟 3：等審核通過 ← **現在卡在這裡**
+### ~~步驟 3：等審核通過~~ ✅ 已通過（2026-09-11）
 
-Google 會寄信通知，首次送封閉測試通常幾小時到幾天。審核期間 Play Console 不用動。
+- [x] 審核通過，Testers 分頁的兩個 **Copy link** 都已生效
+  - Join on Android：`https://play.google.com/store/apps/details?id=com.heartchen.squat`
+  - Join on the web：`https://play.google.com/apps/testing/com.heartchen.squat`（格式推定，未與 Copy link 逐字核對）
+- [x] 群組連結 `https://groups.google.com/g/squat-coach-testers` 確認可用
+- [x] 招募素材產出：`docs/threads-recruit.png`（1080×1350）、`docs/qr-opt-in.png`，生成腳本 `tools/make_recruit_image.py`
+- [x] **Threads 招募文已發出**（2026-09-11）
 
-通過後依序做：
+---
 
-- [ ] Closed testing → Alpha → Testers → **Copy link** 取得 opt-in 連結
-      （格式通常是 `https://play.google.com/apps/testing/com.heartchen.squat`，**以 Play Console 顯示的為準**）
-- [ ] 把連結填進 `docs/THREADS_RECRUITMENT.md` 的 `<OPT_IN_LINK>` 佔位符
-- [ ] **用無痕視窗**把 opt-in 連結與群組連結各點一次，確認陌生人真的打得開（不是只有你登入時才行）
-- [ ] 自己用**非開發者帳號**（`hata.s520@gmail.com`）走完整動線：加入群組 → opt-in → 點「成為測試人員」→ 從 Play 商店安裝
-- [ ] 生 QR code 與招募圖（App 截圖 + 三步驟 + QR）
-- [ ] 在 Threads 發文招募 12 位
+### ⏳ 步驟 4：盯 opt-in 人數 ← **現在在這裡**
 
-### 步驟 4：盯住 opt-in 人數
+Play Console → Closed testing → Alpha → Testers，看 opted-in 人數。
 
-- [ ] **≥12 人完成 opt-in**（加入群組 ≠ opt-in，見下方說明）
+- [ ] **≥12 人完成 opt-in**（加入群組 ≠ opt-in）
 - [ ] 從人數達標起算，連續 **14 天**
 - [ ] 期間留意 Pre-launch report 有無 crash
 - [ ] 條件滿足後 Apply for production
+
+#### ⚠️ 未解決：web opt-in 那一步到底需不需要？
+
+發文前沒測完就發了，所以這題還沒有答案。**改用症狀來判斷**：
+
+| 觀察到什麼 | 意義 | 怎麼修 |
+|---|---|---|
+| 有人回報「找不到你要的項目」 | web opt-in **是**必要的，招募圖的 3 步驟是對的 | 在留言置頂補充 web 連結，並確認大家有點「成為測試人員」 |
+| 沒人反映、但 opted-in 人數一直是 0，群組卻有人加入 | 同上，大家卡在第 2 步 | 同上 |
+| opted-in 人數正常增加 | 現行流程沒問題 | 不用動 |
+
+> 判讀重點：**群組成員數與 opted-in 人數要分開看**。兩者落差大就是卡在 opt-in 那一步，這是整個流程最容易失敗的地方。
+
+#### 人數卡住時的追蹤留言
+`docs/THREADS_RECRUITMENT.md` 裡已備好一則，填上目前人數即可發。
 
 ### 為什麼是 Google Group 而不是 Email list
 
@@ -104,7 +118,7 @@ Google 會寄信通知，首次送封閉測試通常幾小時到幾天。審核�
 |---|---|---|
 | 1 (1.0) | 首版 | 已被取代 |
 | 2 (1.0) | 骨架疊圖一律顯示、警告訊息移到下方 | 已上傳 Closed testing，存檔中 |
-| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查、匯出全部歷史** | ✅ 已上傳並送審，**審核中** |
+| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查、匯出全部歷史** | ✅ **審核通過，已發布到 Closed testing** |
 
 **這輪修的 App bug（2026-09-09）：**
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
