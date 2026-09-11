@@ -1,5 +1,29 @@
 # Threads 測試員招募文
 
+## 素材
+- `docs/threads-recruit.png`（1080×1350，Threads 直式）— 由 `tools/make_recruit_image.py` 產生
+- `docs/qr-opt-in.png`（單獨的 QR code）
+
+## ⚠️ 待決：需不需要 Join on the web 這一步？
+
+Play Console 給了兩個連結：
+
+| 連結 | 網址 |
+|---|---|
+| Join on Android | `https://play.google.com/store/apps/details?id=com.heartchen.squat` |
+| Join on the web | `https://play.google.com/apps/testing/com.heartchen.squat`（**待與 Play Console 的 Copy link 核對**）|
+
+Play Console 對前者的描述是「Testers can join your test using Google Play on Android」，字面上暗示 Android 的 Play 商店 App 自己就能完成加入，不一定要先走 web opt-in。**尚未驗證。**
+
+**決定性測試**（用一個還沒 opt-in 的帳號，順序不可顛倒）：
+1. 加入群組
+2. **不要**開 Join on the web 連結（開了按下去該帳號就 opt-in，測試失效）
+3. 直接在 Android 的 Play 商店 App 開 Join on Android 連結
+
+- App 出現可安裝 → web 連結不需要，招募文縮成 **2 步驟**，QR 改編商店連結
+- 「找不到你要的項目」→ web 連結必要，維持下方 **3 步驟**版本
+
+
 > ⚠️ 使用前先把兩處佔位符換成真實網址：
 > - `<OPT_IN_LINK>` → Play Console → Closed testing → Alpha → Testers → **Copy link**（審核通過後才會亮）
 >   格式通常是 `https://play.google.com/apps/testing/com.heartchen.squat`，**但以 Play Console 顯示的為準**
