@@ -3,6 +3,7 @@ package com.heartchen.squat.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.heartchen.squat.squat.DepthFeedback
+import com.heartchen.squat.squat.ExerciseType
 import com.heartchen.squat.squat.TrainingMode
 
 /**
@@ -22,6 +23,11 @@ data class SquatRepRecord(
     val kneeValgus: Boolean,
     val feedbackColor: DepthFeedback,
     val mode: TrainingMode,
+    /**
+     * 動作類型。v2 以前的紀錄全部都是深蹲，migration 以 'SQUAT' 回填，語意正確。
+     * 先放進來是為了讓之後新增動作時不必再遷移一次資料庫。
+     */
+    val exerciseType: ExerciseType = ExerciseType.SQUAT,
     /** 本次最低點的原始深度（以站姿的髖-踝距離正規化），即 p 的分子。 */
     val dNow: Float? = null,
     /** 當次訓練校正取得的個人化基準深度，即 p 的分母。 */

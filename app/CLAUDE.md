@@ -144,3 +144,66 @@ UI: Jetpack Compose
 - [x] M3 完成
 - [x] M4 完成
 - [ ] M5 未開始
+
+---
+
+## M6｜訓練統計（本機日／週／月）
+
+**目標**：讓使用者看到自己的累積訓練量，並為後續多動作支援預留資料結構。
+
+### 任務清單
+- [x] `SquatRepRecord` 新增 `exerciseType` 欄位，Room v2 → v3（`ALTER TABLE ... DEFAULT 'SQUAT'`，既有紀錄全是深蹲，回填值語意正確）
+  - 先加欄位而非等到真的有第二種動作，是為了少做一次 migration —— 每次遷移都是一次讓測試人員資料消失的機會
+- [x] `SquatRepDao` 新增 `recordsSince` / `countBetween` / `totalCount` / `earliestTimestamp`
+- [x] `stats/TrainingStats.kt`：日期分桶純函式（`DateBuckets`、`buildDailyBuckets`）
+- [x] `stats/TrainingStatsOverlay.kt`：今日／本週／本月三個大數字 + 最近 14 天長條圖 + 每日明細
+- [x] 進入點：選擇訓練模式畫面的「訓練統計」
+- [x] 單元測試 `app/src/test/.../TrainingStatsTest.kt`（純 JVM，`./gradlew test` 可跑）
+
+### 設計決策
+
+1. **日期分組在 Kotlin 做，不用 SQL 的 `strftime`**
+   `strftime('localtime')` 取的是查詢當下的裝置時區，而摘要數字的區間邊界是 Kotlin 算的。
+   兩套時區邏輯並存時，跨日跨月的那幾筆會在「摘要」與「每日明細」之間對不起來。
+
+2. **用 `java.util.Calendar` 而非 `java.time`**
+   minSdk 24，`java.time` 需要 API 26。不開 core library desugaring 的前提下 Calendar 是唯一選擇。
+
+3. **一週從星期一起算**
+   zh-TW locale 的 Calendar 預設 `firstDayOfWeek` 是星期日，與一般人講「這週」的理解不符，因此明確指定。
+
+4. **長條圖以「期間內單日最高」為滿格**
+   固定上限會讓訓練量少的使用者整排都是貼地短柱，看不出相對變化。
+
+5. **沒訓練的日子也畫出空格**
+   少了空白格，圖表會把「連續練三天」與「三天裡只練一天」畫成一樣。
+
+### 驗收標準
+覆蓋安裝舊版後，既有紀錄的 `exerciseType` 全部為 `SQUAT` 且筆數不變；統計頁的今日／本週／本月數字與每日明細加總一致。
+
+---
+
+## M7 以後（已討論，尚未開工）
+
+依「風險遞增、相依性遞減」排序：
+
+1. ~~統計頁 + `exerciseType` 欄位~~ ✅ 即 M6
+2. **動作抽象層 + 品質檢查重構**
+   ⚠️ `PoseQuality.passesQualityCheck` 目前要求 `KeyPointType.entries` **全部**到齊。
+   若把 enum 從 6 個擴到 33 個全身關鍵點，這行會要求 33 點全部偵測到且信心值達標，
+   結果是幾乎每一幀都被丟棄、App 表面上完全沒反應。
+   必須改成每個動作宣告自己需要哪些關鍵點。
+3. **坐站（Sit-to-Stand）**
+   Senior Fitness Test 的 30 秒坐站測試，有臨床常模；軌跡同為髖部垂直位移可複用狀態機；
+   椅子在身後等於安全網，是最適合長者的第一個新動作。
+4. **全身偵測**
+   ML Kit 本來就計算全部 33 個點，`PoseAnalyzer.landmarksOfInterest` 只是挑了 6 個，
+   所以開啟全身**不增加推論成本**，成本在上面第 2 點的重構。
+5. **卡路里估算**
+   MET 公式需要體重（新增個資輸入），且族群平均的個體誤差達 ±20~30%。
+   純本機儲存不算 Play 定義的 collection，但隱私權政策需補充說明。
+   **不可列入論文量化指標** —— 這是 UX 功能，不是研究數據。
+
+### 長者取向的安全性提醒
+現有 L1/L2/L3 是「挑戰更深」的框架。使用者換成長者後，鼓勵多做一下或蹲更深都有致傷風險，
+文案語氣需整體改為「在安全範圍內完成」。

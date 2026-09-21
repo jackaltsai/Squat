@@ -2,6 +2,7 @@ package com.heartchen.squat.data
 
 import androidx.room.TypeConverter
 import com.heartchen.squat.squat.DepthFeedback
+import com.heartchen.squat.squat.ExerciseType
 import com.heartchen.squat.squat.TrainingMode
 
 /** Room 無法直接儲存 enum，這裡以 name 字串來回轉換。 */
@@ -17,4 +18,10 @@ class SquatTypeConverters {
 
     @TypeConverter
     fun toTrainingMode(value: String): TrainingMode = TrainingMode.valueOf(value)
+
+    @TypeConverter
+    fun fromExerciseType(value: ExerciseType): String = value.name
+
+    @TypeConverter
+    fun toExerciseType(value: String): ExerciseType = ExerciseType.valueOf(value)
 }

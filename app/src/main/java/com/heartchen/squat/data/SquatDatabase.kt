@@ -22,7 +22,18 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [SquatRepRecord::class], version = 2, exportSchema = false)
+/**
+ * v2 → v3：新增 exerciseType。
+ * 既有紀錄全部是深蹲，所以用 NOT NULL DEFAULT 'SQUAT' 回填 —— 這不是為了避開 NULL，
+ * 而是因為 'SQUAT' 對那些列來說就是正確的值。
+ */
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE squat_rep_records ADD COLUMN exerciseType TEXT NOT NULL DEFAULT 'SQUAT'")
+    }
+}
+
+@Database(entities = [SquatRepRecord::class], version = 3, exportSchema = false)
 @TypeConverters(SquatTypeConverters::class)
 abstract class SquatDatabase : RoomDatabase() {
     abstract fun squatRepDao(): SquatRepDao
@@ -37,7 +48,7 @@ abstract class SquatDatabase : RoomDatabase() {
                     context.applicationContext,
                     SquatDatabase::class.java,
                     "squat.db"
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
         }
     }

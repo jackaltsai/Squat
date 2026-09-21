@@ -60,12 +60,18 @@ import com.heartchen.squat.pose.PoseOverlay
 import com.heartchen.squat.pose.evaluateFraming
 import com.heartchen.squat.pose.passesQualityCheck
 import com.heartchen.squat.squat.DepthFeedback
+import com.heartchen.squat.squat.ExerciseType
 import com.heartchen.squat.squat.SquatState
 import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
 import com.heartchen.squat.squat.detectKneeValgus
 import com.heartchen.squat.squat.evaluateDepthFeedback
 import com.heartchen.squat.squat.kneeValgusRatio
+import com.heartchen.squat.stats.DateBuckets
+import com.heartchen.squat.stats.STATS_CHART_DAYS
+import com.heartchen.squat.stats.TrainingStatsOverlay
+import com.heartchen.squat.stats.TrainingSummary
+import com.heartchen.squat.stats.buildDailyBuckets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -132,6 +138,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // 準備倒數目前要顯示的大字：「準備」→「3」→「2」→「1」→「開始！」，null 表示不在倒數。
     var readyCountdownText by remember { mutableStateOf<String?>(null) }
     var exportFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    var showStats by remember { mutableStateOf(false) }
+    var statsSummary by remember { mutableStateOf<TrainingSummary?>(null) }
     // 骨架疊圖一律顯示（見下方 PoseOverlay），這個開關只控制信心值數字列表跟
     // M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態），一般使用者不需要開啟。
     var debugMode by remember { mutableStateOf(false) }
@@ -238,6 +246,30 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         delay(800)
         readyCountdownText = null
         flowStep = FlowStep.TRAINING
+    }
+
+    // 讀取訓練統計。日/週/月的區間邊界一律在 Kotlin 端算（見 DateBuckets 的說明），
+    // 摘要數字與每日圖表才會用同一套定義，跨日跨月那幾筆不會對不起來。
+    val loadStats: () -> Unit = {
+        statsSummary = null
+        coroutineScope.launch {
+            val now = System.currentTimeMillis()
+            val dao = database.squatRepDao()
+            val summary = withContext(Dispatchers.IO) {
+                val dayStart = DateBuckets.startOfDay(now)
+                val chartFrom = DateBuckets.addDays(dayStart, -(STATS_CHART_DAYS - 1))
+                // 上界給 Long.MAX_VALUE 而不是 now：語意是「這個時間點之後的全部」，
+                // 用 now 當上界會漏掉剛好同一毫秒寫入的那一筆。
+                TrainingSummary(
+                    todayReps = dao.countBetween(dayStart, Long.MAX_VALUE),
+                    weekReps = dao.countBetween(DateBuckets.startOfWeek(now), Long.MAX_VALUE),
+                    monthReps = dao.countBetween(DateBuckets.startOfMonth(now), Long.MAX_VALUE),
+                    totalReps = dao.totalCount(),
+                    days = buildDailyBuckets(dao.recordsSince(chartFrom), STATS_CHART_DAYS, now)
+                )
+            }
+            statsSummary = summary
+        }
     }
 
     // 匯出資料庫裡的全部歷史紀錄。
@@ -405,6 +437,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                                 kneeValgus = kneeValgus == true,
                                 feedbackColor = feedback,
                                 mode = mode,
+                                exerciseType = ExerciseType.SQUAT,
                                 dNow = dNow,
                                 duser = dUser,
                                 kneeValgusRatio = valgusRatio
@@ -673,7 +706,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     trainingMode = mode
                     flowStep = FlowStep.STAND_HOLD
                 },
-                onExportAll = exportAllHistory
+                onExportAll = exportAllHistory,
+                onShowStats = {
+                    loadStats()
+                    showStats = true
+                }
             )
 
             FlowStep.STAND_HOLD -> StandHoldOverlay(
@@ -724,6 +761,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             FlowStep.SQUAT_CALIBRATION -> Unit
         }
 
+        if (showStats) {
+            TrainingStatsOverlay(
+                summary = statsSummary,
+                onClose = { showStats = false },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
         if (showHistory) {
             TrainingHistoryOverlay(
                 records = sessionRecords,
@@ -734,7 +779,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ModeSelectOverlay(onSelect: (TrainingMode) -> Unit, onExportAll: () -> Unit) {
+private fun ModeSelectOverlay(
+    onSelect: (TrainingMode) -> Unit,
+    onExportAll: () -> Unit,
+    onShowStats: () -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -763,6 +812,17 @@ private fun ModeSelectOverlay(onSelect: (TrainingMode) -> Unit, onExportAll: () 
                         .padding(vertical = 16.dp)
                 )
             }
+            Text(
+                text = "訓練統計",
+                color = Color.White,
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF00695C), RoundedCornerShape(12.dp))
+                    .clickable { onShowStats() }
+                    .padding(vertical = 12.dp)
+            )
             // 起始畫面也放一個入口，是為了讓「上一組忘記按分享」的資料不用重跑一次訓練就能救回來。
             Text(
                 text = "匯出全部歷史紀錄",
