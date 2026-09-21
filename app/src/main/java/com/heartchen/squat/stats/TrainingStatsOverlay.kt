@@ -47,7 +47,12 @@ fun TrainingStatsOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0B1B2B).copy(alpha = 0.97f))
+            // 完全不透明：這是一個全螢幕頁面，不是疊在相機上的提示。
+            // 留 3% 透明度並不會產生層次感，只會讓後面的「選擇訓練模式」、除錯模式開關
+            // 與框位警告透出來變成雜訊。
+            .background(Color(0xFF0B1B2B))
+            // 擋掉點擊，避免點統計頁時誤觸到後面的相機 UI
+            .clickable(enabled = false) {}
     ) {
         Column(
             modifier = Modifier
