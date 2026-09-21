@@ -24,7 +24,15 @@ class PoseAnalyzer(
             .build()
     )
 
+    // ML Kit 本來就會計算全部 33 個 landmark，這裡挑幾個只影響下游處理量，
+    // 不影響推論成本，所以上半身一併取出供手臂類動作使用。
     private val landmarksOfInterest = listOf(
+        PoseLandmark.LEFT_SHOULDER to KeyPointType.LEFT_SHOULDER,
+        PoseLandmark.RIGHT_SHOULDER to KeyPointType.RIGHT_SHOULDER,
+        PoseLandmark.LEFT_ELBOW to KeyPointType.LEFT_ELBOW,
+        PoseLandmark.RIGHT_ELBOW to KeyPointType.RIGHT_ELBOW,
+        PoseLandmark.LEFT_WRIST to KeyPointType.LEFT_WRIST,
+        PoseLandmark.RIGHT_WRIST to KeyPointType.RIGHT_WRIST,
         PoseLandmark.LEFT_HIP to KeyPointType.LEFT_HIP,
         PoseLandmark.RIGHT_HIP to KeyPointType.RIGHT_HIP,
         PoseLandmark.LEFT_KNEE to KeyPointType.LEFT_KNEE,

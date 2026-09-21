@@ -207,3 +207,55 @@ UI: Jetpack Compose
 ### 長者取向的安全性提醒
 現有 L1/L2/L3 是「挑戰更深」的框架。使用者換成長者後，鼓勵多做一下或蹲更深都有致傷風險，
 文案語氣需整體改為「在安全範圍內完成」。
+
+---
+
+## M8｜九動作架構 + 3×3 選單（進行中）
+
+**目標**：從「只有深蹲」擴展成長者取向的九個動作，並把 UI 改成圖示格線。
+
+### 九個動作與其計量方式
+
+九個動作**不是同一種計次**，紀錄與統計都必須跟著分開：
+
+| 計量 | 動作 | 單位 |
+|---|---|---|
+| `REPS` 次數型 | 深蹲、坐站練習、原地高抬腿、踮腳尖、雙臂高舉、擴胸推掌 | 下 |
+| `HOLD_SECONDS` 持續型 | 側身伸展(15s)、單腳站立(30s) | **秒** |
+| `TIMED_REPS` 限時計次 | 30秒坐站（STST） | 30 秒內幾下 |
+
+單腳站立記「做了 5 下」沒有意義，它是平衡測試。
+
+### 校正方式也必須分開（`CalibrationKind`）
+
+現有的「站姿校正 + 兩下基準深蹲 → Duser → p = Dnow/Duser」只對深蹲家族成立：
+單腳站立沒有深度、側身伸展的位移在 X 軸、踮腳尖的位移會淹沒在關鍵點雜訊裡。
+因此由動作自己宣告 `STAND_AND_BASELINE_REPS` / `STAND_ONLY` / `NONE`。
+
+### 已完成
+- [x] `KeyPointType` 擴充上半身六點（肩/肘/腕），`PoseAnalyzer` 一併擷取
+      （ML Kit 本來就算全部 33 點，多取不增加推論成本）
+- [x] **拆除品質檢查地雷**：`passesQualityCheck` 改為只檢查「當前動作宣告需要的點」，
+      不再是 `KeyPointType.entries` 全部
+- [x] `ExerciseType` 九個動作定義（含 `measurement` / `calibration` / `requiredPoints` /
+      `guidance` / `safetyNote` / `detectionImplemented`）
+- [x] `ExerciseIcon`：九個 Canvas 線條人物圖示，0..1 正規化座標
+- [x] `ExercisePicker`：3×3 格線，尚未實作偵測的動作標灰並顯示「準備中」
+- [x] 移除訓練模式選擇器，固定 `TrainingMode.BEGINNER`
+
+### ⚠️ 為何保留 `TrainingMode` 而不刪除
+三段式門檻是**論文表 1 的設計主張**，M3 驗收標準明載「切換三種模式時回饋門檻確實依表格切換」。
+從程式碼刪掉就再也無法驗證、也無法在口試上 demo。因此只從 UI 移除選擇器、固定用入門門檻 ——
+對長者而言「挑戰更深」本來就不該是預設框架。
+
+### 尚未完成（九個動作中八個只有 UI，偵測未實作）
+- [ ] `CHAIR_SQUAT` 坐站：可複用現有垂直位移狀態機，但基準是坐姿而非站姿
+- [ ] `STST_30S`：同上，外加 30 秒倒數與限時計次
+- [ ] `HIGH_KNEES`：改追蹤膝 Y，且左右腳交替 —— 要決定「一下」是單腳還是一組
+- [ ] `HEEL_RAISE`：追蹤踝/腳跟 Y，位移極小，**雜訊比是主要風險**
+- [ ] `ARM_RAISE` / `CHEST_EXPANSION`：追蹤腕相對肩的位移，需上半身關鍵點（已備妥）
+- [ ] `SIDE_STRETCH` / `SINGLE_LEG_STANCE`：**持續型**，需要全新的「維持姿勢計時器」
+      而非五階段狀態機
+- [ ] `SquatRepRecord` 需要 `durationSeconds` 欄位容納持續型（Room v3 → v4）
+- [ ] 統計頁需依 `measurement` 分開加總，「下」與「秒」不能混加
+- [ ] `PoseConfidenceList` 目前寫死下肢六點，手臂動作除錯時看不到上肢信心值

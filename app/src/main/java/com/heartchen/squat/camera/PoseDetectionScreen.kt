@@ -61,6 +61,7 @@ import com.heartchen.squat.pose.evaluateFraming
 import com.heartchen.squat.pose.passesQualityCheck
 import com.heartchen.squat.squat.DepthFeedback
 import com.heartchen.squat.squat.ExerciseType
+import com.heartchen.squat.squat.ExercisePicker
 import com.heartchen.squat.squat.SquatState
 import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
@@ -84,12 +85,12 @@ private const val TAG = "PoseDetectionScreen"
 private const val KNEE_VALGUS_MESSAGE = "膝蓋往外一點"
 
 /**
- * M3 流程：選模式 → 站姿校正（3 秒）→ 基準深蹲校正（2 次）→ 準備倒數（3、2、1）→ 正式訓練 → 結束。
+ * 流程：選動作 → 站姿校正（3 秒）→ 基準深蹲校正（2 次）→ 準備倒數（3、2、1）→ 正式訓練 → 結束。
  *
  * READY_COUNTDOWN 是為了把「校正的兩下」跟「正式計次的第一下」明確切開：
  * 沒有倒數的話，使用者做完第二下校正深蹲會直接接上訓練，不知道什麼時候開始算數。
  */
-private enum class FlowStep { SELECT_MODE, STAND_HOLD, SQUAT_CALIBRATION, READY_COUNTDOWN, TRAINING, FINISHED }
+private enum class FlowStep { SELECT_EXERCISE, STAND_HOLD, SQUAT_CALIBRATION, READY_COUNTDOWN, TRAINING, FINISHED }
 
 /**
  * M1+M2+M3 Demo 畫面：CameraX 即時預覽 + ML Kit 骨架疊圖 + 品質過濾/EMA 平滑 +
@@ -108,8 +109,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var previewViewSize by remember { mutableStateOf(IntSize.Zero) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
 
-    var flowStep by remember { mutableStateOf(FlowStep.SELECT_MODE) }
-    var trainingMode by remember { mutableStateOf<TrainingMode?>(null) }
+    var flowStep by remember { mutableStateOf(FlowStep.SELECT_EXERCISE) }
+    // 訓練模式選擇器已移除，一律使用入門門檻。
+    // TrainingMode 這個 enum 與三段式門檻邏輯**刻意保留**：那是論文表 1 的設計主張，
+    // 也是 M3 驗收標準的受測對象，從程式碼刪掉就再也無法驗證或在口試上 demo。
+    // 對長者而言「挑戰更深」本來就不該是預設框架，所以只是不暴露給使用者選。
+    val trainingMode = TrainingMode.BEGINNER
+    var selectedExercise by remember { mutableStateOf(ExerciseType.SQUAT) }
 
     var standHoldStartMs by remember { mutableStateOf<Long?>(null) }
     var standHoldElapsedMs by remember { mutableStateOf(0L) }
@@ -324,7 +330,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         var framingIssueStreakCount = 0
         val analyzer = PoseAnalyzer(isFrontCamera = isFrontCamera) { frame ->
             poseFrame = frame
-            val isReady = frame != null && frame.passesQualityCheck()
+            // 只檢查當前動作需要的關鍵點：深蹲用不到手腕，手臂動作用不到腳踝，
+            // 要求全部到齊會讓大量可用的幀被丟棄。
+            val isReady = frame != null && frame.passesQualityCheck(selectedExercise.requiredPoints)
             if (isReady && !wasReady) {
                 toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
             }
@@ -350,7 +358,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             when (flowStep) {
                 // 倒數期間與結束後都不餵狀態機：倒數時使用者可能還在從校正的最後一下站起來，
                 // 結束後畫面停在摘要，兩者都不該再計次。
-                FlowStep.SELECT_MODE, FlowStep.READY_COUNTDOWN, FlowStep.FINISHED -> Unit
+                FlowStep.SELECT_EXERCISE, FlowStep.READY_COUNTDOWN, FlowStep.FINISHED -> Unit
 
                 FlowStep.STAND_HOLD -> {
                     val hipY = averageY(smoothedByType, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP)
@@ -420,15 +428,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     stateForLog = newState.name
                     if (newState == SquatState.BOTTOM) {
                         val dNow = sm.lastBottomDepthRatio
-                        val mode = trainingMode
                         val dUser = duser
                         val kneeValgus = detectKneeValgus(smoothedByType)
                         val valgusRatio = kneeValgusRatio(smoothedByType)
                         kneeValgusFlag = kneeValgus == true
                         Log.d(TAG, "kneeValgusRatio=$valgusRatio kneeValgus=$kneeValgus")
-                        if (dNow != null && mode != null && dUser != null && dUser > 0f) {
+                        if (dNow != null && dUser != null && dUser > 0f) {
                             val p = dNow / dUser
-                            val feedback = evaluateDepthFeedback(p, mode)
+                            val feedback = evaluateDepthFeedback(p, trainingMode)
                             depthFeedback = feedback
                             // dNow / dUser / valgusRatio 是門檻判定前的原始值，一併留存供 M5 重新掃描門檻。
                             pendingRecord = SquatRepRecord(
@@ -436,8 +443,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                                 depthRatio = p,
                                 kneeValgus = kneeValgus == true,
                                 feedbackColor = feedback,
-                                mode = mode,
-                                exerciseType = ExerciseType.SQUAT,
+                                mode = trainingMode,
+                                exerciseType = selectedExercise,
                                 dNow = dNow,
                                 duser = dUser,
                                 kneeValgusRatio = valgusRatio
@@ -603,16 +610,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         ) {
             when (flowStep) {
                 FlowStep.TRAINING -> {
-                    trainingMode?.let { mode ->
-                        Text(
-                            text = "模式：${mode.label}",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
+                    Text(
+                        text = selectedExercise.label,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
                     Text(
                         text = "${squatState.label}　次數 $repCount",
                         color = Color.White,
@@ -701,16 +706,16 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         }
 
         when (flowStep) {
-            FlowStep.SELECT_MODE -> ModeSelectOverlay(
-                onSelect = { mode ->
-                    trainingMode = mode
+            FlowStep.SELECT_EXERCISE -> ExercisePicker(
+                onSelect = { exercise ->
+                    selectedExercise = exercise
                     flowStep = FlowStep.STAND_HOLD
                 },
-                onExportAll = exportAllHistory,
                 onShowStats = {
                     loadStats()
                     showStats = true
-                }
+                },
+                onExportAll = exportAllHistory
             )
 
             FlowStep.STAND_HOLD -> StandHoldOverlay(
@@ -753,8 +758,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     standHoldHipSum = 0f
                     standHoldAnkleSum = 0f
                     standHoldSampleCount = 0
-                    trainingMode = null
-                    flowStep = FlowStep.SELECT_MODE
+                    flowStep = FlowStep.SELECT_EXERCISE
                 }
             )
 
@@ -773,66 +777,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             TrainingHistoryOverlay(
                 records = sessionRecords,
                 onClose = { showHistory = false }
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModeSelectOverlay(
-    onSelect: (TrainingMode) -> Unit,
-    onExportAll: () -> Unit,
-    onShowStats: () -> Unit
-) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "選擇訓練模式",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            TrainingMode.entries.forEach { mode ->
-                Text(
-                    text = mode.label,
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF2962FF), RoundedCornerShape(12.dp))
-                        .clickable { onSelect(mode) }
-                        .padding(vertical = 16.dp)
-                )
-            }
-            Text(
-                text = "訓練統計",
-                color = Color.White,
-                fontSize = 18.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF00695C), RoundedCornerShape(12.dp))
-                    .clickable { onShowStats() }
-                    .padding(vertical = 12.dp)
-            )
-            // 起始畫面也放一個入口，是為了讓「上一組忘記按分享」的資料不用重跑一次訓練就能救回來。
-            Text(
-                text = "匯出全部歷史紀錄",
-                color = Color(0xFFB0BEC5),
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onExportAll() }
-                    .padding(vertical = 8.dp)
             )
         }
     }
