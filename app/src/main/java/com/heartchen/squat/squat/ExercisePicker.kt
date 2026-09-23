@@ -30,7 +30,7 @@ private val MUTED = Color(0xFF8FA6B6)
 private val DISABLED = Color(0xFF4A5C6B)
 
 /**
- * 起始畫面：3×3 的動作選擇格線。
+ * 起始畫面：動作選擇格線（每列三格）。
  *
  * 尚未實作偵測的動作仍然顯示，但整格變灰並標示「準備中」——
  * 直接隱藏會讓使用者不知道還有哪些動作；讓它可點進去卻毫無反應，
@@ -137,19 +137,14 @@ private fun ExerciseCard(
             textAlign = TextAlign.Center,
             maxLines = 1
         )
-        Text(
-            text = if (enabled) unitHint(type) else "準備中",
-            color = if (enabled) MUTED else DISABLED,
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
+        if (!enabled) {
+            Text(
+                text = "準備中",
+                color = DISABLED,
+                fontSize = 10.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
     }
-}
-
-/** 卡片副標：讓使用者在點進去之前就知道這個動作記的是「下」還是「秒」。 */
-private fun unitHint(type: ExerciseType): String = when (type.measurement) {
-    ExerciseMeasurement.REPS -> "計次"
-    ExerciseMeasurement.HOLD_SECONDS -> "計時 ${type.targetSeconds ?: 0} 秒"
-    ExerciseMeasurement.TIMED_REPS -> "${type.targetSeconds ?: 0} 秒計次"
 }

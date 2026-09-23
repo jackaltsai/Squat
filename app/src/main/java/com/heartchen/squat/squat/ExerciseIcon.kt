@@ -8,13 +8,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 
 /**
- * 九個動作的圖示，以 Canvas 畫線條人物。
+ * 六個動作的圖示，以 Canvas 畫線條人物。
  *
  * 用向量繪製而非點陣圖，是因為要在 3×3 格線裡隨螢幕寬度縮放，
  * 且尚未實作的動作要能整組變灰（只換 tint，不必準備兩套圖檔）。
  *
  * App 圖示是 3D 算圖的白色人偶，線條圖無法重現那個質感；
- * 但九個並排時，一致的線條風格反而比九張各自算圖的人偶更耐看、也更好辨識。
+ * 但六個並排時，一致的線條風格反而比六張各自算圖的人偶更耐看、也更好辨識。
  *
  * 座標一律用 0..1 正規化（y 軸向下），實際繪製時對映到畫布的正方形內接區域，
  * 所以同一組座標在任何尺寸下比例都不變。
@@ -57,7 +57,7 @@ fun ExerciseIcon(
             )
         }
 
-        /** 椅子：坐站家族共用，側視。 */
+        /** 椅子：坐站練習用，側視。 */
         fun chair() {
             path(0.56f to 0.60f, 0.86f to 0.60f)          // 椅面
             path(0.86f to 0.60f, 0.86f to 0.30f)          // 椅背
@@ -90,18 +90,6 @@ fun ExerciseIcon(
                 ground()
             }
 
-            ExerciseType.STST_30S -> {
-                chair()
-                // 坐在椅子上、正要起身的姿勢，配一個向上箭頭表示反覆站起
-                head(0.30f, 0.26f, r = 0.075f)
-                path(0.30f to 0.34f, 0.33f to 0.56f)
-                path(0.30f to 0.38f, 0.46f to 0.42f)
-                path(0.33f to 0.56f, 0.56f to 0.60f)                  // 大腿（坐姿，水平）
-                path(0.56f to 0.60f, 0.54f to 0.84f)                  // 小腿
-                arrowUp(0.16f, 0.62f, 0.30f)
-                ground()
-            }
-
             ExerciseType.HIGH_KNEES -> {
                 head(0.50f, 0.17f)
                 path(0.50f to 0.26f, 0.50f to 0.54f)
@@ -120,16 +108,6 @@ fun ExerciseIcon(
                 path(0.50f to 0.56f, 0.42f to 0.76f, 0.38f to 0.86f)  // 腳跟抬起
                 path(0.50f to 0.56f, 0.58f to 0.76f, 0.62f to 0.86f)
                 arrowUp(0.80f, 0.56f, 0.34f)
-                ground()
-            }
-
-            ExerciseType.SINGLE_LEG_STANCE -> {
-                head(0.50f, 0.17f)
-                path(0.50f to 0.26f, 0.50f to 0.56f)
-                path(0.50f to 0.32f, 0.29f to 0.27f)                  // 張開手臂維持平衡
-                path(0.50f to 0.32f, 0.71f to 0.27f)
-                path(0.50f to 0.56f, 0.50f to 0.86f)                  // 支撐腳
-                path(0.50f to 0.56f, 0.66f to 0.63f, 0.72f to 0.76f)  // 離地的腳
                 ground()
             }
 
@@ -153,15 +131,6 @@ fun ExerciseIcon(
                 ground()
             }
 
-            ExerciseType.SIDE_STRETCH -> {
-                head(0.59f, 0.20f)
-                path(0.57f to 0.29f, 0.45f to 0.58f)                  // 軀幹向側傾
-                path(0.57f to 0.33f, 0.63f to 0.19f, 0.54f to 0.08f)  // 上舉過頭的手
-                path(0.55f to 0.35f, 0.47f to 0.50f)                  // 另一手自然下垂
-                path(0.45f to 0.58f, 0.39f to 0.86f)
-                path(0.45f to 0.58f, 0.54f to 0.86f)
-                ground()
-            }
         }
     }
 }
