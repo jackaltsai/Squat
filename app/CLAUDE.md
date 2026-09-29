@@ -281,7 +281,14 @@ UI: Jetpack Compose
       不再是 `KeyPointType.entries` 全部
 - [x] `ExerciseType` 六個動作定義（`calibration` / `requiredPoints` / `guidance` /
       `safetyNote` / `detectionImplemented`）
-- [x] `ExerciseIcon`：六個 Canvas 線條人物圖示，0..1 正規化座標
+- [x] 動作圖示改用**使用者提供的 3D 白色人偶點陣圖**（原本的 Canvas 線條圖已刪除）
+      - 去背用「從四角 flood fill」而非「接近白就透明」：人偶本身也是白的，
+        後者會把身體打穿；背景是連通到邊界的區域，人偶不是
+      - **卡片底色改為淺色**。素材是白人偶配柔和投影，本來就為淺底而畫（App 圖示亦然）。
+        深色卡片上投影會變成灰污漬、JPEG 邊緣雜訊會變成暗色鑲邊，要一路修圖才壓得下來
+      - 停用態用**降透明度**而非灰色濾鏡：人偶的立體感全靠明暗層次，染成單一灰會壓成剪影
+      - ⚠️ `CHEST_EXPANSION` 的圖檔尚未取得（`iconRes = null`，UI 畫中性佔位「？」），
+        且 `HEEL_RAISE` 目前用的是「站姿」那張，姿勢不明顯是踮腳尖，待確認
 - [x] `ExercisePicker`：每列三格的格線，尚未實作偵測的動作標灰並顯示「準備中」
 - [x] 移除訓練模式選擇器，固定 `TrainingMode.BEGINNER`
 - [x] `SquatTypeConverters.toExerciseType` 加防禦：未知名稱退回 `SQUAT` 而非丟例外

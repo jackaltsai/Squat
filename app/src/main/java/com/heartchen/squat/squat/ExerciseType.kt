@@ -1,5 +1,7 @@
 package com.heartchen.squat.squat
 
+import androidx.annotation.DrawableRes
+import com.heartchen.squat.R
 import com.heartchen.squat.pose.KeyPointType
 
 /**
@@ -30,6 +32,11 @@ enum class ExerciseType(
     val requiredPoints: Set<KeyPointType>,
     val guidance: String,
     val detectionImplemented: Boolean,
+    /**
+     * 動作圖示。null 代表圖檔尚未提供，UI 會畫一個中性佔位方框而不是借用別的動作的圖
+     * —— 借用會讓使用者以為那就是該動作的姿勢。
+     */
+    @DrawableRes val iconRes: Int? = null,
     /** 長者使用時的安全提醒，會顯示在動作說明下方。 */
     val safetyNote: String? = null,
 ) {
@@ -39,6 +46,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.LOWER_BODY,
         guidance = "雙腳與肩同寬，緩慢下蹲再站起。",
         detectionImplemented = true,
+        iconRes = R.drawable.ic_exercise_squat,
         safetyNote = "感覺膝蓋不適就停止，不需要蹲到最低。",
     ),
 
@@ -48,6 +56,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.LOWER_BODY,
         guidance = "椅子放在身後，蹲到輕觸椅面再站起。",
         detectionImplemented = false,
+        iconRes = R.drawable.ic_exercise_chair_squat,
         safetyNote = "椅子要靠牆固定，不可使用有輪子的椅子。",
     ),
 
@@ -57,6 +66,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.LOWER_BODY,
         guidance = "原地踏步，輪流將膝蓋抬高。",
         detectionImplemented = false,
+        iconRes = R.drawable.ic_exercise_high_knees,
         safetyNote = "覺得不穩就扶著椅背進行。",
     ),
 
@@ -66,6 +76,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.LOWER_BODY,
         guidance = "雙腳踮起再放下，訓練小腿與平衡。",
         detectionImplemented = false,
+        iconRes = R.drawable.ic_exercise_heel_raise,
         safetyNote = "建議扶著穩固的桌椅進行。",
     ),
 
@@ -75,6 +86,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.UPPER_BODY,
         guidance = "雙臂向上高舉再放下，可改為側平舉。",
         detectionImplemented = false,
+        iconRes = R.drawable.ic_exercise_arm_raise,
         safetyNote = "肩膀會痛就降低高度，不必舉到頂。",
     ),
 
@@ -84,6 +96,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.UPPER_BODY,
         guidance = "雙臂向後擴胸，再向前推掌。",
         detectionImplemented = false,
+        // TODO 圖檔尚未提供（2026-09-29 那張雙手前推的圖沒有成功上傳）
     );
 
 
