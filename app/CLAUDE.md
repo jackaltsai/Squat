@@ -287,8 +287,8 @@ UI: Jetpack Compose
       - **卡片底色改為淺色**。素材是白人偶配柔和投影，本來就為淺底而畫（App 圖示亦然）。
         深色卡片上投影會變成灰污漬、JPEG 邊緣雜訊會變成暗色鑲邊，要一路修圖才壓得下來
       - 停用態用**降透明度**而非灰色濾鏡：人偶的立體感全靠明暗層次，染成單一灰會壓成剪影
-      - ⚠️ `CHEST_EXPANSION` 的圖檔尚未取得（`iconRes = null`，UI 畫中性佔位「？」），
-        且 `HEEL_RAISE` 目前用的是「站姿」那張，姿勢不明顯是踮腳尖，待確認
+      - 六張圖已到齊，`iconRes` 為非 null 的必填欄位，六個動作各有自己的圖不共用
+      - ⚠️ `HEEL_RAISE` 用的是「站姿」那張，姿勢不明顯是踮腳尖，待確認是否要換
 - [x] `ExercisePicker`：每列三格的格線，尚未實作偵測的動作標灰並顯示「準備中」
 - [x] 移除訓練模式選擇器，固定 `TrainingMode.BEGINNER`
 - [x] `SquatTypeConverters.toExerciseType` 加防禦：未知名稱退回 `SQUAT` 而非丟例外

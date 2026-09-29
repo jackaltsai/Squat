@@ -138,26 +138,15 @@ private fun ExerciseCard(
                 .aspectRatio(1f),
             contentAlignment = Alignment.Center
         ) {
-            val iconRes = type.iconRes
-            if (iconRes != null) {
-                Image(
-                    painter = painterResource(iconRes),
-                    contentDescription = type.label,
-                    contentScale = ContentScale.Fit,
-                    // 停用態用降透明度而非套灰色濾鏡：人偶的立體感全靠明暗層次，
-                    // 一律染成同一個灰會把它壓成剪影，反而看不出是什麼動作。
-                    alpha = if (enabled) 1f else 0.35f,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                // 圖檔還沒提供時畫一個中性佔位，不借用別的動作的圖。
-                Text(
-                    text = "？",
-                    color = LABEL_DISABLED,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Image(
+                painter = painterResource(type.iconRes),
+                contentDescription = type.label,
+                contentScale = ContentScale.Fit,
+                // 停用態用降透明度而非套灰色濾鏡：人偶的立體感全靠明暗層次，
+                // 一律染成同一個灰會把它壓成剪影，反而看不出是什麼動作。
+                alpha = if (enabled) 1f else 0.35f,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         Text(
             text = type.label,

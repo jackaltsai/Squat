@@ -32,11 +32,8 @@ enum class ExerciseType(
     val requiredPoints: Set<KeyPointType>,
     val guidance: String,
     val detectionImplemented: Boolean,
-    /**
-     * 動作圖示。null 代表圖檔尚未提供，UI 會畫一個中性佔位方框而不是借用別的動作的圖
-     * —— 借用會讓使用者以為那就是該動作的姿勢。
-     */
-    @DrawableRes val iconRes: Int? = null,
+    /** 動作圖示。六個動作都有自己的圖，不共用 —— 借用別的動作的圖會誤導使用者。 */
+    @DrawableRes val iconRes: Int,
     /** 長者使用時的安全提醒，會顯示在動作說明下方。 */
     val safetyNote: String? = null,
 ) {
@@ -96,7 +93,7 @@ enum class ExerciseType(
         requiredPoints = KeyPointType.UPPER_BODY,
         guidance = "雙臂向後擴胸，再向前推掌。",
         detectionImplemented = false,
-        // TODO 圖檔尚未提供（2026-09-29 那張雙手前推的圖沒有成功上傳）
+        iconRes = R.drawable.ic_exercise_chest_expansion,
     );
 
 
