@@ -56,7 +56,12 @@ object SessionExporter {
         return try {
             file.bufferedWriter().use { writer ->
                 writer.write(
-                    "repIndex,timestampMs,localTime,mode," +
+                    // exerciseType 必須輸出：Room 從 v3 就有這個欄位，但匯出時漏掉，
+                    // 導致有兩種動作之後完全無法分辨哪一場是深蹲、哪一場是坐站
+                    // （2026-10-01 的坐站實測資料只能靠「最後一場、剛好 10 下」推斷）。
+                    // 插在 mode 前面而非附加在最後：p 值要配合動作才讀得懂，
+                    // 分析腳本以欄位名稱存取，插入不會破壞既有腳本。
+                    "repIndex,timestampMs,localTime,exerciseType,mode," +
                         "dNow,duser,depthRatio,feedbackColor,kneeValgusRatio,kneeValgus"
                 )
                 writer.newLine()
@@ -67,6 +72,7 @@ object SessionExporter {
                             (index + 1).toString(),
                             record.timestamp.toString(),
                             timeFormat.format(Date(record.timestamp)),
+                            record.exerciseType.name,
                             record.mode.name,
                             record.dNow?.toString().orEmpty(),
                             record.duser?.toString().orEmpty(),

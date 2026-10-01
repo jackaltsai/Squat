@@ -42,12 +42,17 @@ def split_sessions(df):
     """把單一檔案內的紀錄依時間間隔切成場次，回傳 [(標籤, 子 DataFrame), ...]。"""
     df = df.sort_values("timestampMs").reset_index(drop=True)
     gap = df["timestampMs"].diff().fillna(0) / 1000
-    # 時間隔太久，或訓練模式換了，都視為新的一場
+    # 時間隔太久、訓練模式換了、或動作換了，都視為新的一場
     new_session = (gap > SESSION_GAP_SECONDS) | (df["mode"] != df["mode"].shift())
+    if "exerciseType" in df.columns:
+        new_session |= df["exerciseType"] != df["exerciseType"].shift()
     df = df.assign(_session=new_session.cumsum())
     out = []
     for i, (_, d) in enumerate(df.groupby("_session"), start=1):
-        label = f"{d['sourceFile'].iloc[0]} #{i} ({d['localTime'].iloc[0]})"
+        # 動作名稱放進標籤：坐站與深蹲的 p 值分布完全不同（椅面固定了深度，
+        # 2026-10-01 實測坐站 CV 4.5% vs 深蹲 20%），混在一起看會得到錯誤結論
+        ex = f" {d['exerciseType'].iloc[0]}" if "exerciseType" in d.columns else ""
+        label = f"{d['sourceFile'].iloc[0]} #{i}{ex} ({d['localTime'].iloc[0]})"
         out.append((label, d))
     return out
 
@@ -114,6 +119,7 @@ def main():
     for name, d in sessions:
         row = {
             "場次": name,
+            "動作": d["exerciseType"].iloc[0] if "exerciseType" in d.columns else "?",
             "模式": d["mode"].iloc[0],
             "次數": len(d),
             "p平均": round(d["depthRatio"].mean(), 3),
