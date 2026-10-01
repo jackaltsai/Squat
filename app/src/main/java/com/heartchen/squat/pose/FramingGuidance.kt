@@ -10,8 +10,11 @@ import com.heartchen.squat.squat.ExerciseType
  *
  * **判準依動作而異。** 原本整個函式硬性要求腳踝，拿不到就回「請往後站一點」——
  * 對手臂動作而言腳踝既拿不到也不需要，使用者會被一直叫往後站。
- * 反過來，上肢動作有一個下肢動作沒有的要求：**頭頂必須留空間**，
- * 否則手舉過頭時手腕出框，而原本的框位引導對此一句話都不會說。
+ *
+ * ⚠️ 上肢動作**不要求頭頂留得下整隻舉直的手**。曾經加過這條檢查，結果是
+ * 「請往後站」與「請往前站」互相拉扯、距離完全拿不準（詳見
+ * `Config.FRAMING_WRIST_NEAR_TOP_RATIO` 的註解）。判準是舉到肩高，
+ * 追蹤到肩高就夠了。
  *
  * 訊息刻意都在六個字以內，而且主詞是「使用者自己」而非手機：
  * 這些字同時會被 TTS 念出來，而使用者正站在兩公尺外做動作 ——
@@ -27,8 +30,13 @@ enum class FramingIssue(val message: String) {
     HIP_NEAR_TOP_EDGE("請往後站"),
     /** 上肢動作：偵測不到手腕，通常是手垂在畫面外或被身體遮住。 */
     MISSING_WRIST("請讓雙手入鏡"),
-    /** 上肢動作：頭頂空間不足或手腕已貼上緣，舉起來會被裁掉。 */
-    NO_HEADROOM("請往後站"),
+    /**
+     * 上肢動作：手腕已貼齊畫面上緣。
+     *
+     * 訊息是「舉到肩膀就好」而不是「請往後站」—— 判準本來就是舉到肩高，
+     * 而且使用者正在動作中，叫他停下來走過去重新站位不如直接告訴他舉到哪裡就夠。
+     */
+    WRIST_NEAR_TOP_EDGE("舉到肩膀就好"),
     OK("框位良好")
 }
 
@@ -77,7 +85,7 @@ private fun evaluateLowerBodyFraming(
 }
 
 /**
- * 上肢動作的框位：肩與腕要在框內、肩膀上方要留得下舉起的手、遠近用肩寬判斷。
+ * 上肢動作的框位：肩與腕要在框內、遠近用肩寬佔畫面寬度判斷。
  *
  * 檢查順序是刻意的 —— 先回報「看不到」再回報「位置不對」，
  * 因為看不到手的時候沒辦法判斷遠近，先叫使用者往前站只會把事情弄得更亂。
@@ -95,10 +103,9 @@ private fun evaluateUpperBodyFraming(
     val widthPx = frame.imageWidth.toFloat()
     if (heightPx <= 0f || widthPx <= 0f) return FramingIssue.OK
 
-    val shoulderY = (leftShoulder.y + rightShoulder.y) / 2f
-    // 手腕已經貼上緣，或肩膀上方空間不足以容納舉起的手
-    if (wristY / heightPx < Config.FRAMING_WRIST_NEAR_TOP_RATIO) return FramingIssue.NO_HEADROOM
-    if (shoulderY / heightPx < Config.FRAMING_SHOULDER_HEADROOM_RATIO) return FramingIssue.NO_HEADROOM
+    if (wristY / heightPx < Config.FRAMING_WRIST_NEAR_TOP_RATIO) {
+        return FramingIssue.WRIST_NEAR_TOP_EDGE
+    }
 
     val shoulderWidthRatio = kotlin.math.abs(leftShoulder.x - rightShoulder.x) / widthPx
     return when {

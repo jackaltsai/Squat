@@ -77,7 +77,7 @@ enum class ExerciseType(
     ARM_RAISE(
         label = "雙臂高舉",
         requiredPoints = KeyPointType.UPPER_BODY,
-        guidance = "雙臂向上高舉再放下。",
+        guidance = "雙臂向上舉起再放下，舉到肩膀高度就夠。",
         detectionImplemented = true,
         feedback = FeedbackMessages("舉到位了！", "再舉高一點", "手舉太低了"),
         iconRes = R.drawable.ic_exercise_arm_raise,

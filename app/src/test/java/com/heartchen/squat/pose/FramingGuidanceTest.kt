@@ -75,20 +75,41 @@ class FramingGuidanceTest {
         assertEquals(FramingIssue.MISSING_WRIST, evaluateFraming(noWrists, ExerciseType.ARM_RAISE))
     }
 
+    /**
+     * 曾經有一條「肩膀上方要留得下整隻舉直的手」的檢查，門檻 0.30。
+     * 它在物理上無法滿足 —— 直向手機 2~2.5 公尺拍全身時肩只落在 0.24~0.29，
+     * 要過關得退到 3 公尺外，那時又快被判太遠，於是「請往後站」與「請往前站」
+     * 互相拉扯，使用者完全抓不到距離（2026-10-01 實機，每下間隔 18~47 秒）。
+     * 這條測試鎖住它不會被加回來。
+     */
     @Test
-    fun `肩膀太靠近畫面上緣時提示頭頂空間不足`() {
-        // 肩在畫面 23% 處，上方空間不足以容納舉起的手
+    fun `全身入鏡時肩膀位置偏高仍視為框位良好`() {
+        // 肩在畫面 23% 處 —— 這是直向手機拍全身的常態，不該被當成問題
         assertEquals(
-            FramingIssue.NO_HEADROOM,
+            FramingIssue.OK,
             evaluateFraming(upperBody(shoulderY = 300f), ExerciseType.ARM_RAISE)
+        )
+        // 2.5 公尺處的典型值
+        assertEquals(
+            FramingIssue.OK,
+            evaluateFraming(upperBody(shoulderY = 372f), ExerciseType.ARM_RAISE)
         )
     }
 
     @Test
-    fun `手腕已貼齊畫面上緣時提示頭頂空間不足`() {
+    fun `手腕快被畫面上緣裁掉時提示舉到肩膀就好`() {
         assertEquals(
-            FramingIssue.NO_HEADROOM,
+            FramingIssue.WRIST_NEAR_TOP_EDGE,
             evaluateFraming(upperBody(wristY = 20f), ExerciseType.ARM_RAISE)
+        )
+    }
+
+    @Test
+    fun `手腕舉到肩膀上方但未貼邊時框位良好`() {
+        // 判準是舉到肩高，舉過肩很正常，不該因此報框位問題
+        assertEquals(
+            FramingIssue.OK,
+            evaluateFraming(upperBody(wristY = 200f), ExerciseType.ARM_RAISE)
         )
     }
 
