@@ -15,7 +15,8 @@ import androidx.compose.ui.unit.sp
 import com.heartchen.squat.config.Config
 import java.util.Locale
 
-private val displayOrder = listOf(
+/** 下肢六點的固定顯示順序（左右成對，方便肉眼比對左右是否一致）。 */
+private val lowerBodyOrder = listOf(
     KeyPointType.LEFT_HIP,
     KeyPointType.RIGHT_HIP,
     KeyPointType.LEFT_KNEE,
@@ -24,9 +25,31 @@ private val displayOrder = listOf(
     KeyPointType.RIGHT_ANKLE,
 )
 
-/** 集中列出六個關鍵點的信心值，供 M1 肉眼判斷抓取穩定度用（字級加大方便實機閱讀）。 */
+/** 上肢六點的固定顯示順序。 */
+private val upperBodyOrder = listOf(
+    KeyPointType.LEFT_SHOULDER,
+    KeyPointType.RIGHT_SHOULDER,
+    KeyPointType.LEFT_ELBOW,
+    KeyPointType.RIGHT_ELBOW,
+    KeyPointType.LEFT_WRIST,
+    KeyPointType.RIGHT_WRIST,
+)
+
+/**
+ * 列出**當前動作實際需要的**關鍵點信心值，供肉眼判斷抓取穩定度（字級加大方便實機閱讀）。
+ *
+ * [required] 來自 `ExerciseType.requiredPoints`。原本寫死下肢六點 ——
+ * 這在只有深蹲時沒問題，但手臂動作除錯時會看著一整排「--」，
+ * 完全看不到真正在用的肩/肘/腕信心值，等於研究模式對上肢動作失效。
+ */
 @Composable
-fun PoseConfidenceList(poseFrame: PoseFrame?, modifier: Modifier = Modifier) {
+fun PoseConfidenceList(
+    poseFrame: PoseFrame?,
+    required: Set<KeyPointType>,
+    modifier: Modifier = Modifier
+) {
+    // 依固定順序顯示，而不是用 Set 的迭代順序 —— 每幀順序跳動的清單沒辦法用眼睛讀。
+    val displayOrder = (lowerBodyOrder + upperBodyOrder).filter { it in required }
     val pointsByType = poseFrame?.keyPoints?.associateBy { it.type } ?: emptyMap()
 
     Column(

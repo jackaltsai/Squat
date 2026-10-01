@@ -22,8 +22,8 @@ import java.util.Random
  */
 class SquatStateMachineTest {
 
-    /** 站立基準取 0、正規化尺度取 1，如此 hipY 的數值就等於 depthRatio，斷言可以直接讀。 */
-    private fun machine() = SquatStateMachine(standBaselineY = 0f, normalizeScale = 1f)
+    /** 站立基準取 0、正規化尺度取 1，如此 hipY 的數值就等於進度，斷言可以直接讀。 */
+    private fun machine() = SquatStateMachine(SquatSignal(standBaselineY = 0f, normalizeScale = 1f))
 
     /** 狀態機只讀左右髖的 Y，其餘關鍵點不影響判定，所以這裡只餵髖部。 */
     private fun hip(y: Float): Map<KeyPointType, KeyPoint> = mapOf(
@@ -80,7 +80,7 @@ class SquatStateMachineTest {
         m.feed(listOf(0.50f, 0.45f, 0.40f, 0.30f))
         m.returnToStand()
 
-        assertEquals(0.62f, m.lastBottomDepthRatio!!, 1e-4f)
+        assertEquals(0.62f, m.lastPeakProgress!!, 1e-4f)
     }
 
     // ---- 坐站練習的兩個新情境 ----
@@ -135,8 +135,8 @@ class SquatStateMachineTest {
         assertEquals(1, m.repCount)
         // 深度應該落在停頓時的實際最低點附近，不是停頓中段的某個雜訊值
         assertTrue(
-            "深度 ${m.lastBottomDepthRatio} 應接近 0.555",
-            m.lastBottomDepthRatio!! in 0.550f..0.560f
+            "深度 ${m.lastPeakProgress} 應接近 0.555",
+            m.lastPeakProgress!! in 0.550f..0.560f
         )
     }
 
@@ -163,8 +163,8 @@ class SquatStateMachineTest {
         // 深度須反映坐定時的實際最低點（0.56 加上雜訊），
         // 而不是停頓途中被雜訊誤判出來的某個較淺的值
         assertTrue(
-            "深度 ${m.lastBottomDepthRatio} 應接近 0.566",
-            m.lastBottomDepthRatio!! in 0.560f..0.572f
+            "深度 ${m.lastPeakProgress} 應接近 0.566",
+            m.lastPeakProgress!! in 0.560f..0.572f
         )
     }
 

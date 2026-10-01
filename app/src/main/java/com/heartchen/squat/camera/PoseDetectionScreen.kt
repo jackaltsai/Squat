@@ -51,8 +51,6 @@ import com.heartchen.squat.debug.FrameLogger
 import com.heartchen.squat.debug.SessionExporter
 import com.heartchen.squat.pose.EmaSmoother
 import com.heartchen.squat.pose.FramingIssue
-import com.heartchen.squat.pose.KeyPoint
-import com.heartchen.squat.pose.KeyPointType
 import com.heartchen.squat.pose.PoseAnalyzer
 import com.heartchen.squat.pose.PoseConfidenceList
 import com.heartchen.squat.pose.PoseFrame
@@ -62,12 +60,15 @@ import com.heartchen.squat.pose.passesQualityCheck
 import com.heartchen.squat.squat.DepthFeedback
 import com.heartchen.squat.squat.ExerciseType
 import com.heartchen.squat.squat.ExercisePicker
+import com.heartchen.squat.squat.RepSignal
+import com.heartchen.squat.squat.StandCalibrator
 import com.heartchen.squat.squat.SquatState
 import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
 import com.heartchen.squat.squat.detectKneeValgus
 import com.heartchen.squat.squat.evaluateDepthFeedback
 import com.heartchen.squat.squat.kneeValgusRatio
+import com.heartchen.squat.squat.standCalibratorFor
 import com.heartchen.squat.stats.DateBuckets
 import com.heartchen.squat.stats.STATS_CHART_DAYS
 import com.heartchen.squat.stats.TrainingStatsOverlay
@@ -119,12 +120,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 
     var standHoldStartMs by remember { mutableStateOf<Long?>(null) }
     var standHoldElapsedMs by remember { mutableStateOf(0L) }
-    var standHoldHipSum by remember { mutableStateOf(0f) }
-    var standHoldAnkleSum by remember { mutableStateOf(0f) }
-    var standHoldSampleCount by remember { mutableStateOf(0) }
-
-    var calibratedBaselineY by remember { mutableStateOf<Float?>(null) }
-    var calibratedScale by remember { mutableStateOf<Float?>(null) }
+    // 站姿校正要量什麼由動作決定：深蹲家族量「髖部基準 + 髖踝距離」，
+    // 雙臂高舉量「肩寬 + 站姿時手腕低於肩的距離」。
+    // 不能統一累加四組關鍵點 —— 品質檢查只保證當前動作需要的點到齊，
+    // 手臂動作時髖與踝可能根本沒偵測到，一起累加會讓站姿校正永遠跑不完。
+    var standCalibrator by remember { mutableStateOf<StandCalibrator?>(null) }
+    var standCalibrationWarning by remember { mutableStateOf<String?>(null) }
+    // 站姿校正產生的動作訊號，整場訓練固定不變，確保 p 的計算基準前後一致。
+    var repSignal by remember { mutableStateOf<RepSignal?>(null) }
     var calibrationStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
     var calibrationSquatState by remember { mutableStateOf(SquatState.STAND) }
     var calibrationDepths by remember { mutableStateOf<List<Float>>(emptyList()) }
@@ -133,6 +136,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var calibrationWarning by remember { mutableStateOf<String?>(null) }
 
     var trainingStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
+    // 達成率 p 的分母。深蹲家族是校正兩下基準動作得到的個人化深度 Duser；
+    // 其餘動作是 RepSignal.target（固定解剖學判準，如手腕舉到肩高）。
+    // 兩者都寫進紀錄的 duser 欄位 —— 那個欄位的定義就是「p 的分母」，
+    // 留空的話事後無從還原分子分母，M5 重新掃描門檻就做不了。
     var duser by remember { mutableStateOf<Float?>(null) }
     var repCount by remember { mutableIntStateOf(0) }
     var depthFeedback by remember { mutableStateOf<DepthFeedback?>(null) }
@@ -196,7 +203,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(depthFeedback) {
         val feedback = depthFeedback
         if (feedback != null) {
-            textToSpeech.value?.speak(feedback.message, TextToSpeech.QUEUE_ADD, null, null)
+            // 文案取自當前動作：雙臂高舉舉不夠高時該說「手舉太低了」，不是「蹲太淺了」
+            val message = selectedExercise.feedback.of(feedback)
+            textToSpeech.value?.speak(message, TextToSpeech.QUEUE_ADD, null, null)
             delay(2000)
             depthFeedback = null
         }
@@ -222,6 +231,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             else -> null
         }
         message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
+    }
+
+    // 站姿量測失敗（例如舉手動作校正時就把手舉著）也要出聲，理由同下。
+    LaunchedEffect(standCalibrationWarning) {
+        standCalibrationWarning?.let {
+            textToSpeech.value?.speak(it, TextToSpeech.QUEUE_FLUSH, null, null)
+        }
     }
 
     // 校正被判定不一致而要求重做時，語音講一次（使用者離手機遠，只看文字可能沒注意到）。
@@ -340,7 +356,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             wasReady = isReady
 
             // 框位引導同一個問題須連續穩定幾幀才算數，避免深蹲快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
-            val currentFramingIssue = evaluateFraming(frame)
+            val currentFramingIssue = evaluateFraming(frame, selectedExercise)
             if (currentFramingIssue == framingIssueStreakValue) {
                 framingIssueStreakCount++
             } else {
@@ -362,21 +378,41 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 FlowStep.SELECT_EXERCISE, FlowStep.READY_COUNTDOWN, FlowStep.FINISHED -> Unit
 
                 FlowStep.STAND_HOLD -> {
-                    val hipY = averageY(smoothedByType, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP)
-                    val ankleY = averageY(smoothedByType, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
-                    if (hipY != null && ankleY != null) {
+                    // 尚未實作偵測的動作沒有累加器（UI 已標灰不可點，這裡只是防線）。
+                    val calibrator = standCalibrator
+                        ?: standCalibratorFor(selectedExercise)?.also { standCalibrator = it }
+                        ?: return@PoseAnalyzer
+                    if (calibrator.accumulate(smoothedByType)) {
                         val startMs = standHoldStartMs ?: System.currentTimeMillis().also { standHoldStartMs = it }
-                        standHoldHipSum += hipY
-                        standHoldAnkleSum += ankleY
-                        standHoldSampleCount += 1
                         standHoldElapsedMs = System.currentTimeMillis() - startMs
-                        if (standHoldElapsedMs >= Config.STAND_HOLD_DURATION_MS && standHoldSampleCount > 0) {
-                            val baselineY = standHoldHipSum / standHoldSampleCount
-                            val scale = standHoldAnkleSum / standHoldSampleCount - baselineY
-                            calibratedBaselineY = baselineY
-                            calibratedScale = scale
-                            calibrationStateMachine = SquatStateMachine(baselineY, scale)
-                            flowStep = FlowStep.SQUAT_CALIBRATION
+                        if (standHoldElapsedMs >= Config.STAND_HOLD_DURATION_MS) {
+                            val signal = calibrator.build()
+                            if (signal == null) {
+                                // 站姿量測無效，例如舉手動作在校正時就把手舉著，
+                                // 手腕沒有低於肩、判準會是 0 或負數。必須重來並說明原因 ——
+                                // 不說的話使用者會卡在「倒數結束了卻什麼都沒發生」的畫面。
+                                Log.w(TAG, "Stand calibration invalid for $selectedExercise")
+                                standCalibrator = null
+                                standHoldStartMs = null
+                                standHoldElapsedMs = 0L
+                                standCalibrationWarning = "請雙手自然下垂"
+                            } else {
+                                repSignal = signal
+                                standCalibrationWarning = null
+                                val fixedTarget = signal.target
+                                if (fixedTarget == null) {
+                                    // 深蹲家族：分母是個人化的 Duser，還要再做兩下基準動作。
+                                    calibrationStateMachine = SquatStateMachine(signal)
+                                    flowStep = FlowStep.SQUAT_CALIBRATION
+                                } else {
+                                    // 其餘動作的判準是固定解剖學地標（手腕舉到肩高），
+                                    // 站姿校正本身就取得了分母，不需要兩下基準動作 ——
+                                    // 也不該要求，對手臂動作而言「兩下基準深蹲」毫無意義。
+                                    duser = fixedTarget
+                                    trainingStateMachine = SquatStateMachine(signal)
+                                    flowStep = FlowStep.READY_COUNTDOWN
+                                }
+                            }
                         }
                     }
                 }
@@ -387,7 +423,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     calibrationSquatState = newState
                     stateForLog = "CALIBRATION_${newState.name}"
                     if (newState == SquatState.BOTTOM) {
-                        sm.lastBottomDepthRatio?.let { depth ->
+                        sm.lastPeakProgress?.let { depth ->
                             calibrationDepths = calibrationDepths + depth
                         }
                     }
@@ -396,24 +432,23 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val mean = depths.average().toFloat()
                         // 全距除以平均：兩下差太多代表其中一下是試探性的淺蹲，取平均當 Duser 不可信。
                         val spread = if (mean > 0f) (depths.max() - depths.min()) / mean else 0f
-                        val baselineY = calibratedBaselineY
-                        val scale = calibratedScale
+                        val signal = repSignal
                         if (spread > Config.CALIBRATION_MAX_DEPTH_SPREAD &&
                             calibrationRetryCount < Config.CALIBRATION_MAX_RETRIES &&
-                            baselineY != null && scale != null
+                            signal != null
                         ) {
                             Log.w(TAG, "Calibration rejected: depths=$depths spread=$spread")
                             calibrationRetryCount += 1
                             calibrationDepths = emptyList()
                             calibrationSquatState = SquatState.STAND
-                            calibrationStateMachine = SquatStateMachine(baselineY, scale)
+                            calibrationStateMachine = SquatStateMachine(signal)
                             calibrationWarning = "兩次深度差太多，請重做"
-                        } else if (baselineY != null && scale != null) {
+                        } else if (signal != null) {
                             // 重試次數用完仍不一致就照收，避免使用者卡在校正出不去；
                             // Duser 會寫進每筆紀錄的 CSV，事後分析看得出這場校正品質不佳。
                             duser = mean
                             calibrationWarning = null
-                            trainingStateMachine = SquatStateMachine(baselineY, scale)
+                            trainingStateMachine = SquatStateMachine(signal)
                             // 先進倒數而不是直接開始訓練，讓使用者知道從哪一下開始算數。
                             flowStep = FlowStep.READY_COUNTDOWN
                         }
@@ -427,7 +462,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     repCount = sm.repCount
                     stateForLog = newState.name
                     if (newState == SquatState.BOTTOM) {
-                        val dNow = sm.lastBottomDepthRatio
+                        val dNow = sm.lastPeakProgress
                         val dUser = duser
                         val kneeValgus = detectKneeValgus(smoothedByType)
                         val valgusRatio = kneeValgusRatio(smoothedByType)
@@ -462,7 +497,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         }
                         pendingRecord = null
                     }
-                    Log.d(TAG, "state=$newState count=${sm.repCount} p=${duser?.let { d -> sm.lastBottomDepthRatio?.div(d) }}")
+                    Log.d(TAG, "state=$newState count=${sm.repCount} p=${duser?.let { d -> sm.lastPeakProgress?.div(d) }}")
                 }
             }
 
@@ -684,6 +719,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         if (debugMode) {
             PoseConfidenceList(
                 poseFrame = currentFrame,
+                required = selectedExercise.requiredPoints,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(16.dp)
@@ -710,14 +746,15 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             FlowStep.STAND_HOLD -> StandHoldOverlay(
                 exercise = selectedExercise,
                 remainingSeconds = ((Config.STAND_HOLD_DURATION_MS - standHoldElapsedMs) / 1000L + 1)
-                    .coerceIn(0, Config.STAND_HOLD_DURATION_MS / 1000L + 1)
+                    .coerceIn(0, Config.STAND_HOLD_DURATION_MS / 1000L + 1),
+                warning = standCalibrationWarning
             )
 
             FlowStep.READY_COUNTDOWN -> readyCountdownText?.let { ReadyCountdownOverlay(it) }
 
             FlowStep.TRAINING -> {
                 depthFeedback?.let { feedback ->
-                    DepthFeedbackBanner(feedback)
+                    DepthFeedbackBanner(feedback, selectedExercise.feedback.of(feedback))
                 }
             }
 
@@ -739,14 +776,12 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     calibrationSquatState = SquatState.STAND
                     calibrationRetryCount = 0
                     calibrationWarning = null
-                    calibratedBaselineY = null
-                    calibratedScale = null
+                    standCalibrator = null
+                    repSignal = null
+                    standCalibrationWarning = null
                     duser = null
                     standHoldStartMs = null
                     standHoldElapsedMs = 0L
-                    standHoldHipSum = 0f
-                    standHoldAnkleSum = 0f
-                    standHoldSampleCount = 0
                     flowStep = FlowStep.SELECT_EXERCISE
                 }
             )
@@ -766,7 +801,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StandHoldOverlay(exercise: ExerciseType, remainingSeconds: Long) {
+private fun StandHoldOverlay(
+    exercise: ExerciseType,
+    remainingSeconds: Long,
+    warning: String? = null
+) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -814,6 +853,20 @@ private fun StandHoldOverlay(exercise: ExerciseType, remainingSeconds: Long) {
                 fontSize = 64.sp,
                 fontWeight = FontWeight.Bold
             )
+            // 站姿量測失敗時必須說出原因並重新倒數，否則畫面會停在
+            // 「數到 0 卻什麼都沒發生」，使用者只會以為程式壞了。
+            warning?.let { text ->
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .background(Color(0xFFFF6D00).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 }
@@ -951,7 +1004,7 @@ private fun SessionSummaryOverlay(
 }
 
 @Composable
-private fun DepthFeedbackBanner(feedback: DepthFeedback) {
+private fun DepthFeedbackBanner(feedback: DepthFeedback, message: String) {
     val color = when (feedback) {
         DepthFeedback.GREEN -> Color(0xFF00C853)
         DepthFeedback.YELLOW -> Color(0xFFFFAB00)
@@ -963,7 +1016,7 @@ private fun DepthFeedbackBanner(feedback: DepthFeedback) {
             .background(color.copy(alpha = 0.35f))
     ) {
         Text(
-            text = feedback.message,
+            text = message,
             color = Color.White,
             // 這是使用者站在兩公尺外最需要立刻讀到的一句話，字級對齊倒數的量級
             fontSize = 56.sp,
@@ -976,10 +1029,4 @@ private fun DepthFeedbackBanner(feedback: DepthFeedback) {
                 .padding(horizontal = 32.dp, vertical = 24.dp)
         )
     }
-}
-
-private fun averageY(byType: Map<KeyPointType, KeyPoint>, a: KeyPointType, b: KeyPointType): Float? {
-    val pa = byType[a] ?: return null
-    val pb = byType[b] ?: return null
-    return (pa.y + pb.y) / 2f
 }
