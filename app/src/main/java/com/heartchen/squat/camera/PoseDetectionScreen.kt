@@ -134,13 +134,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 
     var trainingStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
     var duser by remember { mutableStateOf<Float?>(null) }
-    var squatState by remember { mutableStateOf(SquatState.STAND) }
     var repCount by remember { mutableIntStateOf(0) }
     var depthFeedback by remember { mutableStateOf<DepthFeedback?>(null) }
     var kneeValgusFlag by remember { mutableStateOf(false) }
     var pendingRecord by remember { mutableStateOf<SquatRepRecord?>(null) }
     var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
-    var showHistory by remember { mutableStateOf(false) }
     // 準備倒數目前要顯示的大字：「準備」→「3」→「2」→「1」→「開始！」，null 表示不在倒數。
     var readyCountdownText by remember { mutableStateOf<String?>(null) }
     var exportFiles by remember { mutableStateOf<List<File>>(emptyList()) }
@@ -406,7 +404,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                             calibrationDepths = emptyList()
                             calibrationSquatState = SquatState.STAND
                             calibrationStateMachine = SquatStateMachine(baselineY, scale)
-                            calibrationWarning = "兩次深蹲深度差太多，請重做兩次一樣深的深蹲"
+                            calibrationWarning = "兩次深度差太多，請重做"
                         } else if (baselineY != null && scale != null) {
                             // 重試次數用完仍不一致就照收，避免使用者卡在校正出不去；
                             // Duser 會寫進每筆紀錄的 CSV，事後分析看得出這場校正品質不佳。
@@ -423,7 +421,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     val sm = trainingStateMachine ?: return@PoseAnalyzer
                     val previousRepCount = sm.repCount
                     val newState = sm.update(smoothedByType)
-                    squatState = newState
                     repCount = sm.repCount
                     stateForLog = newState.name
                     if (newState == SquatState.BOTTOM) {
@@ -550,6 +547,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             )
         }
 
+        // 訓練中的右上角只留停止鍵。訓練歷程按鈕已移除 —— 結束摘要本來就會顯示
+        // 同樣的次數/達標比例/膝內夾比例，訓練途中多一個按鈕只是多一個干擾。
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -557,43 +556,23 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 停止鍵放在這個常駐控制列，是唯一不會跟其他疊圖打架的位置：
-            // 畫面正中央被站姿倒數/準備倒數/深度回饋佔用，下方被框位警告佔用。
             if (flowStep == FlowStep.TRAINING) {
                 Text(
-                    text = "■ 停止",
+                    text = "停止",
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .background(Color(0xFFD50000).copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                        .background(Color(0xFFD50000), RoundedCornerShape(12.dp))
                         .clickable { stopTraining() }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                )
-                Text(
-                    text = "訓練歷程",
-                    color = Color.White,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .clickable { showHistory = true }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.bodyMedium
+                        .padding(horizontal = 28.dp, vertical = 14.dp)
                 )
             }
-            Text(
-                text = if (debugMode) "除錯模式：開" else "除錯模式：關",
-                color = Color.White,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .clickable { debugMode = !debugMode }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
-            frameLogger?.let { logger ->
+            frameLogger?.let { _ ->
                 Text(
-                    text = "研究紀錄中：${File(logger.filePath).name}",
+                    text = "研究紀錄中",
                     color = Color.White,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     modifier = Modifier
                         .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -613,38 +592,41 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     Text(
                         text = selectedExercise.label,
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = 20.sp,
                         modifier = Modifier
                             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
                     )
+                    // 只顯示次數，不顯示狀態機的 STAND/DOWN/BOTTOM/UP ——
+                    // 那是開發用的代號，對使用者沒有意義，而且會把真正要看的數字擠小。
+                    // 使用者站在兩公尺外，這個數字是他唯一需要遠距離讀取的資訊。
                     Text(
-                        text = "${squatState.label}　次數 $repCount",
+                        text = repCount.toString(),
                         color = Color.White,
-                        fontSize = 28.sp,
+                        fontSize = 96.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 20.dp, vertical = 10.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 36.dp, vertical = 4.dp)
                     )
                     if (kneeValgusFlag) {
                         Text(
-                            text = "膝蓋內夾，往外一點",
+                            text = "膝蓋往外",
                             color = Color.White,
-                            fontSize = 18.sp,
+                            fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
-                                .background(Color(0xFFD50000).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .background(Color(0xFFD50000), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 24.dp, vertical = 10.dp)
                         )
                     }
                 }
 
                 FlowStep.SQUAT_CALIBRATION -> {
                     Text(
-                        text = "基準深蹲校正 ${calibrationSquatState.label}　${calibrationDepths.size}/${Config.CALIBRATION_SQUAT_REPS}",
+                        text = "校正 ${calibrationDepths.size} / ${Config.CALIBRATION_SQUAT_REPS}",
                         color = Color.White,
-                        fontSize = 22.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
@@ -654,7 +636,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         Text(
                             text = warning,
                             color = Color.White,
-                            fontSize = 18.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
@@ -685,7 +667,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             Text(
                 text = framingIssue.message,
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -715,7 +697,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     loadStats()
                     showStats = true
                 },
-                onExportAll = exportAllHistory
+                onExportAll = exportAllHistory,
+                // 研究模式的開關留在這裡而不是訓練畫面：它控制的是 M5 要用的逐幀 CSV，
+                // 刪掉等於拿掉論文參數校準的資料來源；但長輩訓練時不該看到它。
+                researchMode = debugMode,
+                onToggleResearchMode = { debugMode = !debugMode }
             )
 
             FlowStep.STAND_HOLD -> StandHoldOverlay(
@@ -743,7 +729,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     sessionRecords = emptyList()
                     exportFiles = emptyList()
                     repCount = 0
-                    squatState = SquatState.STAND
                     pendingRecord = null
                     trainingStateMachine = null
                     calibrationStateMachine = null
@@ -774,12 +759,6 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        if (showHistory) {
-            TrainingHistoryOverlay(
-                records = sessionRecords,
-                onClose = { showHistory = false }
-            )
-        }
     }
 }
 
@@ -983,56 +962,16 @@ private fun DepthFeedbackBanner(feedback: DepthFeedback) {
         Text(
             text = feedback.message,
             color = Color.White,
-            fontSize = 32.sp,
+            // 這是使用者站在兩公尺外最需要立刻讀到的一句話，字級對齊倒數的量級
+            fontSize = 56.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .align(Alignment.Center)
-                .background(color.copy(alpha = 0.85f), RoundedCornerShape(16.dp))
-                .padding(horizontal = 32.dp, vertical = 20.dp)
+                .padding(horizontal = 16.dp)
+                .background(color.copy(alpha = 0.9f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 32.dp, vertical = 24.dp)
         )
-    }
-}
-
-/** M4：訓練歷程頁面，顯示本次訓練（尚未離開此畫面前）的次數、深度達標比例、膝內夾比例。 */
-@Composable
-private fun TrainingHistoryOverlay(records: List<SquatRepRecord>, onClose: () -> Unit) {
-    val total = records.size
-    val greenCount = records.count { it.feedbackColor == DepthFeedback.GREEN }
-    val valgusCount = records.count { it.kneeValgus }
-    val greenRatio = if (total > 0) greenCount * 100 / total else 0
-    val valgusRatio = if (total > 0) valgusCount * 100 / total else 0
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.75f))
-            .clickable { onClose() }
-    ) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .background(Color(0xFF212121), RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "本次訓練歷程",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(text = "次數：$total", color = Color.White, fontSize = 18.sp)
-            Text(text = "深度達標比例：$greenRatio%（$greenCount/$total）", color = Color.White, fontSize = 18.sp)
-            Text(text = "膝內夾比例：$valgusRatio%（$valgusCount/$total）", color = Color.White, fontSize = 18.sp)
-            Text(
-                text = "點擊任意處關閉",
-                color = Color.Gray,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
     }
 }
 

@@ -59,6 +59,8 @@ fun ExercisePicker(
     onSelect: (ExerciseType) -> Unit,
     onShowStats: () -> Unit,
     onExportAll: () -> Unit,
+    researchMode: Boolean,
+    onToggleResearchMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -119,6 +121,19 @@ fun ExercisePicker(
                     .fillMaxWidth()
                     .clickable { onExportAll() }
                     .padding(vertical = 14.dp)
+            )
+            // 研究模式（逐幀 CSV）的開關放在這裡，不放在訓練畫面：
+            // 它控制 M5 參數校準要用的資料來源，不能刪；但訓練途中長輩不該看到它，
+            // 字級也刻意保持小 —— 這不是給使用者看的功能。
+            Text(
+                text = if (researchMode) "研究模式：開" else "研究模式：關",
+                color = if (researchMode) Color(0xFFFFCC80) else Color(0xFF5B7085),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleResearchMode() }
+                    .padding(vertical = 10.dp)
             )
         }
     }
