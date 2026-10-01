@@ -49,7 +49,13 @@ fun evaluateFraming(
     exercise: ExerciseType = ExerciseType.SQUAT
 ): FramingIssue {
     if (frame == null) return FramingIssue.NO_POSE
-    val byType = frame.keyPoints.associateBy { it.type }
+    // 只採信通過信心值門檻的點。ML Kit 偵測到人就會回傳**全部**關鍵點，
+    // 不管看不看得到 —— 不過濾的話 `byType` 永遠是滿的，
+    // MISSING_WRIST / MISSING_ANKLE / NO_POSE 幾乎永遠不會觸發，
+    // 而後面的位置判斷會拿低信心值的（可能是亂猜的）座標去算。
+    val byType = frame.keyPoints
+        .filter { it.inFrameLikelihood >= Config.CONFIDENCE_THRESHOLD }
+        .associateBy { it.type }
     // 分流依據是「這個動作需不需要腳踝」，而不是比對關鍵點集合是否等於 UPPER_BODY。
     // 用集合相等比較的話，動作一旦只需要肩與腕（不含手肘）就會掉回下肢分支，
     // 「請往後站一點」整個回來 —— 判斷條件綁在集合的「身分」而非「內容」上太脆弱。

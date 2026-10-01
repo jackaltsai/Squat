@@ -355,8 +355,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
             wasReady = isReady
 
-            // 框位引導同一個問題須連續穩定幾幀才算數，避免深蹲快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
-            val currentFramingIssue = evaluateFraming(frame, selectedExercise)
+            // 框位是「擺位」問題，只在使用者回到靜止姿勢時判斷。
+            // 動作進行中本來就會讓關鍵點跑到畫面邊緣（舉手時手腕會接近甚至超出上緣），
+            // 拿動作中的幀去判框位只會一直誤報 —— 實測時整場只聽得到「舉到肩膀就好」
+            // 就是這樣來的。訓練尚未開始時沒有狀態機，一律視為靜止。
+            val atRest = trainingStateMachine?.state?.let { it == SquatState.STAND } ?: true
+            // 框位引導同一個問題須連續穩定幾幀才算數，避免動作快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
+            val currentFramingIssue =
+                if (atRest) evaluateFraming(frame, selectedExercise) else FramingIssue.OK
             if (currentFramingIssue == framingIssueStreakValue) {
                 framingIssueStreakCount++
             } else {

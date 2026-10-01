@@ -167,6 +167,42 @@ class FramingGuidanceTest {
         )
     }
 
+    /**
+     * ML Kit 偵測到人就會回傳**全部**關鍵點，不管看不看得到。
+     * 不依信心值過濾的話，`MISSING_*` 幾乎永遠不會觸發，
+     * 而位置判斷會拿低信心值的（可能是亂猜的）座標去算 ——
+     * 實測時整場只聽得到「舉到肩膀就好」就是這樣來的。
+     */
+    @Test
+    fun `低信心值的關鍵點不列入框位判斷`() {
+        val lowConfidenceWrists = frame(
+            kp(KeyPointType.LEFT_SHOULDER, 290f, 400f),
+            kp(KeyPointType.RIGHT_SHOULDER, 430f, 400f),
+            // 手腕被回報在畫面最上緣，但信心值只有 0.1 —— 這是亂猜的位置，
+            // 不該因此報「舉到肩膀就好」
+            KeyPoint(KeyPointType.LEFT_WRIST, 290f, 5f, 0.1f),
+            KeyPoint(KeyPointType.RIGHT_WRIST, 430f, 5f, 0.1f),
+        )
+        assertEquals(
+            FramingIssue.MISSING_WRIST,
+            evaluateFraming(lowConfidenceWrists, ExerciseType.ARM_RAISE)
+        )
+    }
+
+    @Test
+    fun `低信心值的腳踝不列入框位判斷`() {
+        val lowConfidenceAnkles = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 1270f, 0.2f),
+            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 1270f, 0.2f),
+        )
+        assertEquals(
+            FramingIssue.MISSING_ANKLE,
+            evaluateFraming(lowConfidenceAnkles, ExerciseType.SQUAT)
+        )
+    }
+
     @Test
     fun `沒有偵測到任何姿態時回報沒有偵測到人`() {
         assertEquals(FramingIssue.NO_POSE, evaluateFraming(null, ExerciseType.SQUAT))

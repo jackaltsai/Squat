@@ -207,7 +207,7 @@ class RepSignalTest {
         val signal = armRaiseSignal()
         val m = SquatStateMachine(signal)
         repeat(4) {
-            // 手腕只到 640，進度 0.43 < 進場門檻 0.96
+            // 手腕只到 640，進度 0.43 < 進場門檻 0.64
             listOf(700f, 670f, 640f, 670f, 700f).forEach { m.update(upperBody(it)) }
             repeat(6) { m.update(upperBody(700f)) }
         }
@@ -218,7 +218,7 @@ class RepSignalTest {
     fun `手臂在身側自然晃動不會被計次`() {
         val m = SquatStateMachine(armRaiseSignal())
         val rng = java.util.Random(23)
-        // 晃動幅度 ±30px（約 0.21 個肩寬），遠小於進場門檻 0.96
+        // 晃動幅度 ±30px（約 0.21 個肩寬），遠小於進場門檻 0.64
         repeat(400) { m.update(upperBody(restWristY + (rng.nextFloat() - 0.5f) * 60f)) }
         assertEquals(0, m.repCount)
         assertEquals(SquatState.STAND, m.state)
