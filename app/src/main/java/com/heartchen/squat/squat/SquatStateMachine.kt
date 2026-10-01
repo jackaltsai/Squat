@@ -5,7 +5,10 @@ import com.heartchen.squat.pose.KeyPoint
 import com.heartchen.squat.pose.KeyPointType
 
 /**
- * 深蹲計次狀態機：STAND → DOWN → BOTTOM → UP → STAND（計次 +1）。
+ * 計次狀態機：STAND → DOWN → BOTTOM → UP → STAND（計次 +1）。
+ *
+ * 深蹲與坐站練習共用這個狀態機 —— 兩者的軌跡都是「髖部下降再上升」，
+ * 差別只在深度被椅面限制，而深度本來就是用使用者自己的 Duser 正規化的。
  *
  * 最低點（BOTTOM）判定依據「髖部下降轉上升的轉折點 + 連續幀確認」，
  * 而非單一高度閾值，避免瞬間雜訊誤判（見 CLAUDE.md 第 7 節）。
@@ -27,7 +30,6 @@ class SquatStateMachine(
     var lastBottomDepthRatio: Float? = null
         private set
 
-    private var prevHipY: Float? = null
     private var risingFrameCount = 0
     private var standStableFrameCount = 0
     private var peakHipYInDown: Float? = null
@@ -53,11 +55,20 @@ class SquatStateMachine(
             }
 
             SquatState.DOWN -> {
-                peakHipYInDown = maxOf(peakHipYInDown ?: hipY, hipY)
-                val prev = prevHipY
-                risingFrameCount = if (prev != null && hipY < prev) risingFrameCount + 1 else 0
+                val peakHipY = maxOf(peakHipYInDown ?: hipY, hipY)
+                peakHipYInDown = peakHipY
+                // 判據是「已從本次最低點回升超過一定距離」，而不是「比上一幀高」。
+                // 逐幀比較在慢速起身時會被雜訊打斷而不斷歸零，在坐著停頓時又會被雜訊湊出
+                // 假的連續上升；改用回升量則與速度無關，停頓時回升量為 0 也不會誤觸發。
+                val risenFromPeak = (peakHipY - hipY) / normalizeScale
+                risingFrameCount = if (risenFromPeak >= Config.TURN_CONFIRM_RISE_RATIO) {
+                    risingFrameCount + 1
+                } else {
+                    0
+                }
                 if (risingFrameCount >= Config.TURN_CONFIRM_FRAMES) {
-                    val peakHipY = peakHipYInDown ?: hipY
+                    // 深度仍取本次下降過程的最低點，與轉折何時被確認無關，
+                    // 所以這個改動不會改變 lastBottomDepthRatio 的語意。
                     lastBottomDepthRatio = (peakHipY - standBaselineY) / normalizeScale
                     state = SquatState.BOTTOM
                 }
@@ -82,7 +93,6 @@ class SquatStateMachine(
             }
         }
 
-        prevHipY = hipY
         return state
     }
 

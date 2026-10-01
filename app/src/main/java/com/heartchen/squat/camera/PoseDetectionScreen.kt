@@ -211,11 +211,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // 受測者可能離鏡頭較遠看不清楚文字，流程轉換（進入站姿校正/深蹲校正）也用語音提示一次。
-    LaunchedEffect(flowStep) {
+    // 受測者可能離鏡頭較遠看不清楚文字，流程轉換（進入站姿校正/基準校正）也用語音提示一次。
+    LaunchedEffect(flowStep, selectedExercise) {
         val message = when (flowStep) {
             FlowStep.STAND_HOLD -> "請站直不動，準備校正站姿基準"
-            FlowStep.SQUAT_CALIBRATION -> "請完成兩次深蹲，校正基準深度"
+            // 用動作名稱而非寫死「深蹲」：坐站練習走同一條校正流程，
+            // 叫使用者「做兩次深蹲」會讓他以為選錯動作了。
+            FlowStep.SQUAT_CALIBRATION ->
+                "請完成兩次${selectedExercise.label}，校正基準深度"
             else -> null
         }
         message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
