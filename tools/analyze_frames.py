@@ -6,9 +6,13 @@
   2. 動作進度的實際軌跡 —— 峰值多高、手放下時落到哪（決定進場/返回門檻）
   3. 掉幀集中在哪個狀態（決定是不是該換追蹤的關鍵點）
 
+逐幀 CSV 是在手機上產生的（研究模式開啟時），要先用訓練結束畫面的分享鍵
+傳到電腦 —— 通常會落在 ~/Downloads，不在專案目錄裡。
+
 用法：
-    python3 tools/analyze_frames.py squat_frames_20261001_212523.csv
-    python3 tools/analyze_frames.py *.csv
+    python3 tools/analyze_frames.py                      # 自動在常見位置尋找
+    python3 tools/analyze_frames.py ~/Downloads/squat_frames_20261001_212523.csv
+    python3 tools/analyze_frames.py ~/Downloads/squat_frames_*.csv
 """
 import csv
 import glob
@@ -33,6 +37,19 @@ def fnum(row, key):
 
 def present(rows, point):
     return f"{point}_raw_confidence" in (rows[0].keys() if rows else [])
+
+
+# 從手機分享出來的檔案通常會落在這幾個地方，沒給參數時自動找。
+SEARCH_DIRS = ["", "~/Downloads", "~/Desktop", "~/Documents"]
+FRAME_GLOB = "squat_frames_*.csv"
+
+
+def autodiscover():
+    found = []
+    for d in SEARCH_DIRS:
+        found += glob.glob(os.path.join(os.path.expanduser(d), FRAME_GLOB))
+    # 依修改時間排序，最新的最後印出
+    return sorted(set(found), key=os.path.getmtime)
 
 
 def report(path):
@@ -189,14 +206,54 @@ def report(path):
 
 
 def main():
+    args = sys.argv[1:]
     paths = []
-    for arg in sys.argv[1:]:
-        paths += sorted(glob.glob(arg)) if any(c in arg for c in "*?[") else [arg]
+    missing = []
+    for arg in args:
+        expanded = os.path.expanduser(arg)
+        if any(c in expanded for c in "*?["):
+            hits = sorted(glob.glob(expanded))
+            if hits:
+                paths += hits
+            else:
+                missing.append(arg)
+        elif os.path.isfile(expanded):
+            paths.append(expanded)
+        else:
+            missing.append(arg)
+
+    if missing:
+        for m in missing:
+            print(f"找不到：{m}")
+
+    # 沒給參數，或給的都找不到 —— 自動在常見位置找一次，不要只吐一個 traceback
     if not paths:
-        print(__doc__)
-        sys.exit(1)
+        found = autodiscover()
+        if found:
+            print(f"\n自動找到 {len(found)} 個逐幀 CSV：")
+            for f in found:
+                print(f"  {f}")
+            print()
+            paths = found
+        else:
+            if not missing:
+                print(__doc__)
+            print("在以下位置都找不到 squat_frames_*.csv：")
+            for d in SEARCH_DIRS:
+                print(f"  {os.path.expanduser(d) or os.getcwd()}")
+            print()
+            print("逐幀 CSV 是在手機上產生的，取得方式：")
+            print("  1. 在選擇動作畫面最下方打開「研究模式」")
+            print("  2. 完成一組訓練後按「停止」")
+            print("  3. 結束畫面按分享，把 squat_frames_*.csv 傳到電腦")
+            print("     （Session CSV 是每下一列的紀錄，逐幀的是 squat_frames_ 開頭那個）")
+            sys.exit(1)
+
     for p in paths:
-        report(p)
+        try:
+            report(p)
+        except Exception as exc:  # 一個檔案壞掉不該讓整批中斷
+            print(f"{os.path.basename(p)}: 無法分析（{type(exc).__name__}: {exc}）")
         print()
 
 
