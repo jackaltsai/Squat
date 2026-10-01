@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val SCRIM = Color(0xFF0B1B2B)
-private val MUTED = Color(0xFF8FA6B6)
+private val MUTED = Color(0xFFB4C6D4)
 
 /**
  * 卡片底色刻意是淺色的。
@@ -37,12 +37,18 @@ private val MUTED = Color(0xFF8FA6B6)
  * 要一路修圖才壓得下來；順著素材用淺底則什麼都不必做。
  */
 private val CARD_ENABLED = Color(0xFFFFFFFF)
-private val CARD_DISABLED = Color(0xFFD8DEE3)
+private val CARD_DISABLED = Color(0xFFCFD8DF)
 private val LABEL_ENABLED = Color(0xFF16232E)
-private val LABEL_DISABLED = Color(0xFF7C8A95)
+private val LABEL_DISABLED = Color(0xFF6B7A86)
 
 /**
- * 起始畫面：動作選擇格線（每列三格）。
+ * 起始畫面：動作選擇格線。
+ *
+ * **主要使用者是長者，所有尺寸都往大的調：**
+ * - 每列兩格而非三格。六個動作排成 2×3，卡片寬度比三欄時大 5 成，圖示與文字跟著放大。
+ * - 卡片高度**不寫死**（不用 aspectRatio），由內容撐開。長輩常把系統字級調大，
+ *   若固定高度又限制行數，放大字級只會讓文字被截斷，等於沒有放大。
+ * - 文字一律 `sp`，跟著系統字級一起放大。
  *
  * 尚未實作偵測的動作仍然顯示，但整格變淡並標示「準備中」——
  * 直接隱藏會讓使用者不知道還有哪些動作；讓它可點進去卻毫無反應，
@@ -58,26 +64,26 @@ fun ExercisePicker(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(SCRIM.copy(alpha = 0.94f))
+            .background(SCRIM.copy(alpha = 0.96f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
                 text = "選擇訓練動作",
                 color = Color.White,
-                fontSize = 24.sp,
+                fontSize = 30.sp,
                 fontWeight = FontWeight.Bold
             )
 
-            ExerciseType.GRID_ORDER.chunked(3).forEach { row ->
+            ExerciseType.GRID_ORDER.chunked(2).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     row.forEach { type ->
                         ExerciseCard(
@@ -86,30 +92,33 @@ fun ExercisePicker(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    // 動作數為奇數時補一個等寬空格，最後一張才不會被撐成整列寬
+                    if (row.size == 1) Box(Modifier.weight(1f))
                 }
             }
 
             Text(
                 text = "訓練統計",
                 color = Color.White,
-                fontSize = 17.sp,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .background(Color(0xFF00695C), RoundedCornerShape(12.dp))
+                    .padding(top = 10.dp)
+                    .background(Color(0xFF00695C), RoundedCornerShape(14.dp))
                     .clickable { onShowStats() }
-                    .padding(vertical = 12.dp)
+                    .padding(vertical = 18.dp)
             )
             Text(
                 text = "匯出全部歷史紀錄",
                 color = MUTED,
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onExportAll() }
-                    .padding(vertical = 8.dp)
+                    .padding(vertical = 14.dp)
             )
         }
     }
@@ -125,44 +134,37 @@ private fun ExerciseCard(
 
     Column(
         modifier = modifier
-            .aspectRatio(0.84f)
-            .background(if (enabled) CARD_ENABLED else CARD_DISABLED, RoundedCornerShape(14.dp))
+            .background(if (enabled) CARD_ENABLED else CARD_DISABLED, RoundedCornerShape(18.dp))
             .clickable(enabled = enabled) { onClick() }
-            .padding(6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(horizontal = 10.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
+        Image(
+            painter = painterResource(type.iconRes),
+            contentDescription = type.label,
+            contentScale = ContentScale.Fit,
+            // 停用態用降透明度而非套灰色濾鏡：人偶的立體感全靠明暗層次，
+            // 一律染成同一個灰會把它壓成剪影，反而看不出是什麼動作。
+            alpha = if (enabled) 1f else 0.4f,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(type.iconRes),
-                contentDescription = type.label,
-                contentScale = ContentScale.Fit,
-                // 停用態用降透明度而非套灰色濾鏡：人偶的立體感全靠明暗層次，
-                // 一律染成同一個灰會把它壓成剪影，反而看不出是什麼動作。
-                alpha = if (enabled) 1f else 0.35f,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+                .aspectRatio(1.05f)
+        )
         Text(
             text = type.label,
             color = if (enabled) LABEL_ENABLED else LABEL_DISABLED,
-            fontSize = 13.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            maxLines = 1
+            modifier = Modifier.padding(top = 6.dp)
         )
         if (!enabled) {
             Text(
                 text = "準備中",
                 color = LABEL_DISABLED,
-                fontSize = 10.sp,
+                fontSize = 15.sp,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }

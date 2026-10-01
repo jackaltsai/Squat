@@ -719,6 +719,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             )
 
             FlowStep.STAND_HOLD -> StandHoldOverlay(
+                exercise = selectedExercise,
                 remainingSeconds = ((Config.STAND_HOLD_DURATION_MS - standHoldElapsedMs) / 1000L + 1)
                     .coerceIn(0, Config.STAND_HOLD_DURATION_MS / 1000L + 1)
             )
@@ -783,27 +784,52 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StandHoldOverlay(remainingSeconds: Long) {
+private fun StandHoldOverlay(exercise: ExerciseType, remainingSeconds: Long) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-                .padding(24.dp),
+                .padding(horizontal = 24.dp)
+                .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // 動作說明與安全提醒在這裡才真正用得上：使用者剛選完動作、正要開始做。
+            // 放在選擇格線上只會變成每格都有的雜訊，放在這裡則是「現在該怎麼做」。
             Text(
-                text = "請站直不動，準備校正站姿基準",
-                color = Color.White,
-                fontSize = 20.sp,
+                text = exercise.label,
+                color = Color(0xFF7FE3D4),
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
             Text(
+                text = exercise.guidance,
+                color = Color.White,
+                fontSize = 19.sp,
+                textAlign = TextAlign.Center
+            )
+            exercise.safetyNote?.let { note ->
+                Text(
+                    text = note,
+                    color = Color(0xFFFFCC80),
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Text(
+                text = "請站直不動",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            Text(
                 text = remainingSeconds.coerceAtLeast(0).toString(),
                 color = Color.White,
-                fontSize = 56.sp,
+                fontSize = 64.sp,
                 fontWeight = FontWeight.Bold
             )
         }
