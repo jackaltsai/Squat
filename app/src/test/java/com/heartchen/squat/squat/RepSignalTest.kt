@@ -75,6 +75,25 @@ class RepSignalTest {
         }
     }
 
+    /**
+     * 雙臂高舉只宣告肩與腕。手肘從未被任何地方讀取，卻會因為被軀幹遮住而
+     * 讓整幀被品質檢查丟掉 —— 2026-10-01 實機舉了很多下只計到 2 下。
+     */
+    @Test
+    fun `動作宣告的關鍵點不可包含沒有人讀取的點`() {
+        assertTrue(
+            "雙臂高舉不該要求手肘：訊號與框位都沒有讀取它",
+            KeyPointType.LEFT_ELBOW !in ExerciseType.ARM_RAISE.requiredPoints
+        )
+        // 訊號真正會讀的點必須被宣告，否則品質檢查放行了、訊號卻拿不到點
+        listOf(
+            KeyPointType.LEFT_SHOULDER, KeyPointType.RIGHT_SHOULDER,
+            KeyPointType.LEFT_WRIST, KeyPointType.RIGHT_WRIST,
+        ).forEach {
+            assertTrue("雙臂高舉必須宣告 $it", it in ExerciseType.ARM_RAISE.requiredPoints)
+        }
+    }
+
     @Test
     fun `深蹲家族的 target 為 null，其餘動作為非 null`() {
         // target == null 是「需要兩下基準校正取得 Duser」的唯一判斷依據
@@ -188,7 +207,7 @@ class RepSignalTest {
         val signal = armRaiseSignal()
         val m = SquatStateMachine(signal)
         repeat(4) {
-            // 手腕只到 640，進度 0.43 < 進場門檻 0.54
+            // 手腕只到 640，進度 0.43 < 進場門檻 0.96
             listOf(700f, 670f, 640f, 670f, 700f).forEach { m.update(upperBody(it)) }
             repeat(6) { m.update(upperBody(700f)) }
         }
@@ -199,7 +218,7 @@ class RepSignalTest {
     fun `手臂在身側自然晃動不會被計次`() {
         val m = SquatStateMachine(armRaiseSignal())
         val rng = java.util.Random(23)
-        // 晃動幅度 ±30px（約 0.21 個肩寬），遠小於進場門檻 0.54
+        // 晃動幅度 ±30px（約 0.21 個肩寬），遠小於進場門檻 0.96
         repeat(400) { m.update(upperBody(restWristY + (rng.nextFloat() - 0.5f) * 60f)) }
         assertEquals(0, m.repCount)
         assertEquals(SquatState.STAND, m.state)

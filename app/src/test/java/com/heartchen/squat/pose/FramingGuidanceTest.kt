@@ -48,6 +48,18 @@ class FramingGuidanceTest {
 
     // ---- 這條是重點迴歸：手臂動作不該因為看不到腳踝就被罵 ----
 
+    /**
+     * 框位分流曾經寫成 `requiredPoints == KeyPointType.UPPER_BODY` 的集合相等比較。
+     * 那把判斷綁在集合的「身分」而非「內容」上：雙臂高舉改成只宣告肩與腕
+     * （不含手肘）之後，比較就不成立，整個掉回下肢分支、「請往後站一點」全部回來。
+     */
+    @Test
+    fun `雙臂高舉即使不宣告手肘仍走上肢框位判準`() {
+        assertEquals(FramingIssue.OK, evaluateFraming(upperBody(), ExerciseType.ARM_RAISE))
+        // 擴胸推掌宣告的是含手肘的 UPPER_BODY，也該走上肢分支
+        assertEquals(FramingIssue.OK, evaluateFraming(upperBody(), ExerciseType.CHEST_EXPANSION))
+    }
+
     @Test
     fun `舉手動作在腳踝完全不在畫面內時框位仍然良好`() {
         // upperBody() 裡根本沒有腳踝關鍵點。抽象化之前這裡會回 MISSING_ANKLE，

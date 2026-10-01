@@ -76,7 +76,9 @@ enum class ExerciseType(
 
     ARM_RAISE(
         label = "雙臂高舉",
-        requiredPoints = KeyPointType.UPPER_BODY,
+        // 只宣告真正會讀的點：訊號與框位都只用肩與腕，手肘從未被讀取，
+        // 卻會因為被軀幹遮住而讓整幀被品質檢查丟掉。
+        requiredPoints = KeyPointType.SHOULDER_AND_WRIST,
         guidance = "雙臂向上舉起再放下，舉到肩膀高度就夠。",
         detectionImplemented = true,
         feedback = FeedbackMessages("舉到位了！", "再舉高一點", "手舉太低了"),

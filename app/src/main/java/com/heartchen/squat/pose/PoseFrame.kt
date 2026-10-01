@@ -38,9 +38,24 @@ enum class KeyPointType(val label: String) {
             LEFT_HIP, RIGHT_HIP, LEFT_KNEE, RIGHT_KNEE, LEFT_ANKLE, RIGHT_ANKLE
         )
 
-        /** 手臂動作（高舉、側平舉、擴胸推掌）需要的上肢六點。 */
+        /** 需要手肘的上肢動作（如擴胸推掌，要靠手肘角度分辨前推與外展）。 */
         val UPPER_BODY: Set<KeyPointType> = setOf(
             LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_ELBOW, RIGHT_ELBOW, LEFT_WRIST, RIGHT_WRIST
+        )
+
+        /**
+         * 雙臂高舉只需要肩與腕。
+         *
+         * ⚠️ 原本用 [UPPER_BODY]（含手肘），但**訊號與框位都沒有讀取手肘** ——
+         * 而手肘正是舉手過程中最容易被軀幹遮住、信心值掉下去的點。
+         * 品質檢查要求「所有宣告的點都過 0.6」，於是大量有效幀被白白丟掉，
+         * 計次因此大量漏算（2026-10-01 實機：舉了很多下只計到 2 下）。
+         *
+         * **只宣告真正會讀的點。** 這與當初 `passesQualityCheck` 要求
+         * `KeyPointType.entries` 全部是同一類錯誤。
+         */
+        val SHOULDER_AND_WRIST: Set<KeyPointType> = setOf(
+            LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_WRIST, RIGHT_WRIST
         )
 
         /** 軀幹側彎等需要肩髖相對位置的動作。 */
