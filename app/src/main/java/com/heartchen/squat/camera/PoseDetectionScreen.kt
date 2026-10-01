@@ -373,7 +373,21 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 framingIssue = currentFramingIssue
             }
 
-            if (frame == null || !isReady) return@PoseAnalyzer
+            if (frame == null || !isReady) {
+                // 被品質檢查擋下的幀也要記錄。只記通過的幀的話，研究模式 CSV 完全看不出
+                // 是哪個關鍵點、在什麼數值上把整幀擋掉 —— 而「為什麼不計次」的答案
+                // 往往就在被擋掉的那些幀裡。
+                frame?.let { rejected ->
+                    frameLogger?.logFrame(
+                        rawByType = rejected.keyPoints.associateBy { it.type },
+                        emaByType = emptyMap(),
+                        state = flowStep.name,
+                        qualityOk = false,
+                        framingIssue = currentFramingIssue.name
+                    )
+                }
+                return@PoseAnalyzer
+            }
 
             val smoothedByType = emaSmoother.smooth(frame.keyPoints).associateBy { it.type }
             var stateForLog = flowStep.name
@@ -511,7 +525,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             frameLogger?.logFrame(
                 rawByType = frame.keyPoints.associateBy { it.type },
                 emaByType = smoothedByType,
-                state = stateForLog
+                state = stateForLog,
+                qualityOk = true,
+                framingIssue = currentFramingIssue.name
             )
         }
 

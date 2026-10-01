@@ -13,15 +13,25 @@ import java.util.Locale
 
 private const val TAG = "FrameLogger"
 
-private val LOGGED_KEYPOINTS = listOf(
-    KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP,
-    KeyPointType.LEFT_KNEE, KeyPointType.RIGHT_KNEE,
-    KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE
-)
+/**
+ * 記錄**全部**關鍵點，不挑。
+ *
+ * ⚠️ 原本寫死下肢六點，於是雙臂高舉的研究模式 CSV 裡**完全沒有肩膀與手腕** ——
+ * 正好是那個動作唯一會用到的點，等於儀器壞掉卻還在量
+ * （2026-10-01：為了調舉手門檻特地錄了一場，結果一個需要的欄位都沒有）。
+ *
+ * 用 `entries` 而不是手寫清單：以後新增關鍵點會自動被記錄，不會再漏。
+ */
+private val LOGGED_KEYPOINTS = KeyPointType.entries
 
 /**
  * M4 除錯/研究模式：把每一幀的原始關鍵點座標、EMA 平滑後座標與狀態機狀態寫成 CSV，
  * 供後續用 Python 讀取、跟人工標註比對（見 CLAUDE.md M4 驗收標準）。
+ *
+ * **被品質檢查擋下的幀也會記錄**（`qualityOk = false`，EMA 欄位留空）。
+ * 只記通過的幀的話，CSV 完全看不出是哪個關鍵點、在什麼數值上把整幀擋掉 ——
+ * 而「為什麼不計次」的答案往往就在被擋掉的那些幀裡。
+ * 先前只能從時間戳的空隙去**推估**掉幀率，那不該是推估的。
  * 檔案存在 app 專屬外部儲存（getExternalFilesDir），可用 adb pull 取出，不需額外儲存權限，
  * 且會隨 App 解除安裝一併清除，符合「僅存骨架數據」的隱私規劃。
  */
@@ -44,7 +54,7 @@ class FrameLogger(context: Context) {
     val filePath: String get() = file.absolutePath
 
     private fun buildHeader(): String {
-        val cols = mutableListOf("frameTimestampMs", "state")
+        val cols = mutableListOf("frameTimestampMs", "state", "qualityOk", "framingIssue")
         for (type in LOGGED_KEYPOINTS) {
             cols += "${type.name}_raw_x"
             cols += "${type.name}_raw_y"
@@ -61,9 +71,16 @@ class FrameLogger(context: Context) {
     fun logFrame(
         rawByType: Map<KeyPointType, KeyPoint>,
         emaByType: Map<KeyPointType, KeyPoint>,
-        state: String
+        state: String,
+        qualityOk: Boolean = true,
+        framingIssue: String = ""
     ) {
-        val values = mutableListOf(System.currentTimeMillis().toString(), state)
+        val values = mutableListOf(
+            System.currentTimeMillis().toString(),
+            state,
+            qualityOk.toString(),
+            framingIssue
+        )
         for (type in LOGGED_KEYPOINTS) {
             val p = rawByType[type]
             values += p?.x?.toString().orEmpty()
