@@ -258,10 +258,17 @@ def amplitude_vs_noise(vals, fps, label, scale):
     drift = max(0.0, (hi - lo) - amp)
     noise = min(st.pstdev(vals[i:i + 30]) for i in range(0, len(vals) - 30, 5))
     ratio = amp / noise if noise > 0 else float("inf")
-    mark = "✅" if ratio >= 10 else ("⚠️ " if ratio >= 4 else "❌")
+    # 飄移比振幅還大 → 這段資料是被身體移動主導的，振幅不代表動作幅度。
+    # 2026-10-02 20:39 那場是「站著做擴胸」，腳跟飄移 30px、振幅 12px，
+    # 訊噪比卻算出 28.6 並蓋上綠勾 —— 那個數字毫無意義。
+    drift_dominated = drift > amp
+    if drift_dominated:
+        mark = "✗ 飄移主導"
+    else:
+        mark = "✅" if ratio >= 10 else ("⚠️ " if ratio >= 4 else "❌")
     extra = f"{amp / scale:>8.3f}" if scale else " " * 8
     print(f"    {label:<22}{amp:>8.1f}{extra}{drift:>8.1f}{noise:>7.2f}{ratio:>8.1f} {mark}")
-    return ratio
+    return None if drift_dominated else ratio
 
 
 def heel_raise_report(rows, has_quality, fps):
@@ -282,10 +289,13 @@ def heel_raise_report(rows, has_quality, fps):
         above = sum(1 for v in vals if v >= CONFIDENCE_THRESHOLD)
         print(f"    {point:12} 中位數 {st.median(vals):.3f}　"
               f"達門檻 {above/len(vals):.0%}　最低 {min(vals):.3f}")
-        if above / len(vals) < 0.8:
+        if above / len(vals) < 0.9:
             usable = False
     if not usable:
-        print("\n  ❌ 腳部關鍵點的信心值不足，以腳跟/腳尖為訊號不可行。")
+        # 不下「不可行」的結論：中位數可能是 0.999，低信心的那些幀通常是腳
+        # 短暫出框或被遮住。只陳述事實，讓下面的振幅/雜訊去回答可行性。
+        print("\n  ⚠️  有一成以上的幀腳部不可靠（通常是腳短暫出框或被遮住）。")
+        print("     判準若只靠腳跟，這些幀會被品質檢查丟掉，計次會漏。")
 
     # 腳跟相對腳尖的垂直落差（局部量測，不受身體晃動影響）
     def heel_above_toe(row, side):
@@ -323,7 +333,12 @@ def heel_raise_report(rows, has_quality, fps):
     print("\n  「振幅」是 2 秒窗內的最大-最小（約一個動作週期），不是全程範圍 ——")
     print("  全程範圍會把慢速飄移算進訊號。「飄移」是全程範圍扣掉單週期振幅。")
     print("  振幅/雜訊 ≥10 清楚可用；4~10 勉強；<4 位移淹在雜訊裡。")
-    if ratios and max(ratios) < 10:
+    print("  「✗ 飄移主導」= 飄移大於振幅，這段資料被身體移動主導，數字不代表動作幅度。")
+    print("\n  ⚠️  這一段只有在**這場錄影真的是在踮腳尖**時才有意義。")
+    print("     拿別的動作（例如站著做擴胸）的錄影來看，算出來的是腳的晃動，不是踮腳。")
+    if not ratios:
+        print("\n  ❌ 所有候選訊號都被飄移主導 —— 這份錄影不能當踮腳尖的證據。")
+    elif max(ratios) < 10:
         print(f"\n  ⚠️  最好的腳跟訊號只有 {max(ratios):.1f} —— 落在「勉強」區間。")
         print("     建議再錄一場：**站近一點**（讓腿在畫面裡更大）並刻意踮到最高，")
         print("     看振幅/雜訊會不會進到 10 以上。若仍停在 6~7，")

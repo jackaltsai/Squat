@@ -17,13 +17,19 @@ import org.junit.Test
  */
 class RepSignalTest {
 
-    // 一組固定的身體尺寸：肩在 y=400、肩寬 140、站姿手腕垂在 y=700。
+    // 一組**解剖學上合理**的身體尺寸：肩在 y=400、肩寬 140、手臂長 196（= 1.4 倍肩寬）。
+    //
+    // ⚠️ 原本手臂長取 300（2.14 倍肩寬），刻意誇張以放大訊號 —— 結果加入
+    // `isPlausibleArmToShoulder` 檢查後整組測試掛掉，因為那個身材本身就不符合解剖學
+    // （成人約 1.19~1.72）。fixture 失真的代價不只是這次的紅燈：
+    // 它讓 target 算出 2.14，而實測四場正常的場次是 1.348~1.409，
+    // 所有以它為基礎的斷言都在描述一個不存在的人。
     private val shoulderY = 400f
     private val leftShoulderX = 290f
     private val rightShoulderX = 430f
     private val shoulderWidth = rightShoulderX - leftShoulderX   // 140
-    private val restWristY = 700f
-    private val restDrop = restWristY - shoulderY                // 300
+    private val restDrop = shoulderWidth * 1.4f                  // 196
+    private val restWristY = shoulderY + restDrop                // 596
 
     private fun upperBody(wristY: Float): Map<KeyPointType, KeyPoint> = mapOf(
         KeyPointType.LEFT_SHOULDER to KeyPoint(KeyPointType.LEFT_SHOULDER, leftShoulderX, shoulderY, 0.9f),
@@ -33,6 +39,9 @@ class RepSignalTest {
     )
 
     private fun armRaiseSignal() = ArmRaiseSignal(restDrop, shoulderWidth)
+
+    /** 手腕抬到「站姿到肩高」的 [fraction] 處。1.0 = 剛好肩高 = 判準。 */
+    private fun wristAt(fraction: Float): Float = restWristY - fraction * restDrop
 
     // ---- 不變式：偵測有沒有實作，必須與「有沒有對應的校正累加器」完全一致 ----
 
@@ -193,10 +202,14 @@ class RepSignalTest {
 
     @Test
     fun `判準等於站姿手腕落差除以肩寬`() {
-        // 300 / 140 ≈ 2.143 個肩寬 —— 量級比深蹲的 0.3 個腿長大一個數量級，
+        // 196 / 140 = 1.4 個肩寬 —— 量級比深蹲的 0.3 個腿長大一個數量級，
         // 這就是門檻必須取判準比例而非沿用深蹲絕對值的原因
         assertEquals(restDrop / shoulderWidth, armRaiseSignal().target!!, 1e-4f)
-        assertTrue(armRaiseSignal().target!! > 2f)
+        // 而且必須落在解剖學合理區間，否則站姿校正會拒絕這個身材
+        assertTrue(
+            "測試身材的手臂長/肩寬 = ${armRaiseSignal().target} 不合理",
+            isPlausibleArmToShoulder(armRaiseSignal().target!!)
+        )
     }
 
     @Test
@@ -223,8 +236,8 @@ class RepSignalTest {
     @Test
     fun `舉手動作的站姿校正取平均並產生可用訊號`() {
         val c = ArmRaiseStandCalibrator()
-        // 手臂自然晃動：手腕在 690~710 之間，平均仍是 700
-        listOf(690f, 710f, 695f, 705f, 700f).forEach { assertTrue(c.accumulate(upperBody(it))) }
+        // 手臂自然晃動：手腕在 586~606 之間，平均仍是 596
+        listOf(586f, 606f, 591f, 601f, 596f).forEach { assertTrue(c.accumulate(upperBody(it))) }
         assertEquals(5, c.sampleCount)
         val signal = c.build().single()
         assertEquals(restDrop / shoulderWidth, signal.target!!, 1e-3f)
@@ -593,11 +606,11 @@ class RepSignalTest {
         val signal = armRaiseSignal()
         val m = SquatStateMachine(signal)
 
-        // 舉起：700 → 400（肩高）
-        listOf(700f, 650f, 600f, 500f, 420f, 400f).forEach { m.update(upperBody(it)) }
-        // 放下：400 → 700，並在身側停留足夠幀數
-        listOf(430f, 460f, 490f, 520f, 600f, 660f).forEach { m.update(upperBody(it)) }
-        repeat(8) { m.update(upperBody(700f)) }
+        // 舉起：站姿 → 肩高（以手臂長的比例表示，數字自我說明）
+        listOf(0f, 0.25f, 0.5f, 0.75f, 1.0f).forEach { m.update(upperBody(wristAt(it))) }
+        // 放下：肩高 → 身側，並在身側停留足夠幀數
+        listOf(0.9f, 0.75f, 0.6f, 0.4f, 0.1f).forEach { m.update(upperBody(wristAt(it))) }
+        repeat(8) { m.update(upperBody(wristAt(0f))) }
 
         assertEquals(1, m.repCount)
         assertEquals(SquatState.STAND, m.state)
@@ -609,9 +622,9 @@ class RepSignalTest {
         val signal = armRaiseSignal()
         val m = SquatStateMachine(signal)
         repeat(4) {
-            // 手腕只到 640，進度 0.43 < 進場門檻 0.64
-            listOf(700f, 670f, 640f, 670f, 700f).forEach { m.update(upperBody(it)) }
-            repeat(6) { m.update(upperBody(700f)) }
+            // 只舉到手臂長的 26%，進度 0.364 < 進場門檻 0.42
+            listOf(0f, 0.13f, 0.26f, 0.13f, 0f).forEach { m.update(upperBody(wristAt(it))) }
+            repeat(6) { m.update(upperBody(wristAt(0f))) }
         }
         assertEquals(0, m.repCount)
     }
@@ -620,7 +633,7 @@ class RepSignalTest {
     fun `手臂在身側自然晃動不會被計次`() {
         val m = SquatStateMachine(armRaiseSignal())
         val rng = java.util.Random(23)
-        // 晃動幅度 ±30px（約 0.21 個肩寬），遠小於進場門檻 0.64
+        // 晃動幅度 ±30px（約 0.21 個肩寬），遠小於進場門檻 0.42
         repeat(400) { m.update(upperBody(restWristY + (rng.nextFloat() - 0.5f) * 60f)) }
         assertEquals(0, m.repCount)
         assertEquals(SquatState.STAND, m.state)
@@ -630,15 +643,15 @@ class RepSignalTest {
     fun `舉到最高點停頓不會誤觸發，放下後才計一下`() {
         val signal = armRaiseSignal()
         val m = SquatStateMachine(signal)
-        listOf(700f, 650f, 600f, 500f, 400f).forEach { m.update(upperBody(it)) }
+        listOf(0f, 0.25f, 0.5f, 0.75f, 1.0f).forEach { m.update(upperBody(wristAt(it))) }
         // 在最高點撐住，只有雜訊在動
         val rng = java.util.Random(5)
         repeat(100) {
-            val state = m.update(upperBody(400f + (rng.nextFloat() - 0.5f) * 8f))
+            val state = m.update(upperBody(wristAt(1.0f) + (rng.nextFloat() - 0.5f) * 8f))
             assertEquals("撐在最高點時不應離開 DOWN", SquatState.DOWN, state)
         }
-        listOf(440f, 480f, 520f, 600f, 670f).forEach { m.update(upperBody(it)) }
-        repeat(8) { m.update(upperBody(700f)) }
+        listOf(0.85f, 0.7f, 0.55f, 0.3f, 0.1f).forEach { m.update(upperBody(wristAt(it))) }
+        repeat(8) { m.update(upperBody(wristAt(0f))) }
         assertEquals(1, m.repCount)
     }
 }
