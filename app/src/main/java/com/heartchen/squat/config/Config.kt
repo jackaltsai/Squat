@@ -160,6 +160,20 @@ object Config {
     const val CHEST_EXPANSION_TURN_CONFIRM_FRACTION = 0.08f
     const val CHEST_EXPANSION_RETURN_FRACTION = 0.20f
 
+    // ---- M8 原地高抬腿 ----
+    // 判準是「膝抬到髖高」（大腿接近水平），是一個清楚的解剖學地標。
+    // target = 站姿「膝-髖」垂直距離 ÷ 「髖-踝」垂直距離 ≈ 大腿長/腿長 ≈ 0.5，
+    // 與其他動作的 target 同量級，所以沿用同一組比例門檻。
+
+    /** 進度超過判準的此比例視為開始抬腿。 */
+    const val HIGH_KNEES_ENTER_FRACTION = 0.30f
+
+    /** 須從峰值回退判準的此比例才算轉折（開始放下）。 */
+    const val HIGH_KNEES_TURN_CONFIRM_FRACTION = 0.08f
+
+    /** 進度低於判準的此比例視為該腳已落地，計次 +1。 */
+    const val HIGH_KNEES_RETURN_FRACTION = 0.20f
+
     // ---- M8 上肢動作的框位引導 ----
     // 下肢動作用「髖-踝距離佔畫面高度」判斷遠近，上肢動作拿不到腳踝（也不需要），
     // 改用肩寬佔畫面寬度。

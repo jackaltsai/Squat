@@ -127,7 +127,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var standCalibrator by remember { mutableStateOf<StandCalibrator?>(null) }
     var standCalibrationWarning by remember { mutableStateOf<String?>(null) }
     // 站姿校正產生的動作訊號，整場訓練固定不變，確保 p 的計算基準前後一致。
-    var repSignal by remember { mutableStateOf<RepSignal?>(null) }
+    // **是清單**：原地高抬腿左右腳各一個訊號、各一台狀態機 ——
+    // 兩腳的抬腿半波連續鋪滿，用單一訊號會讓進度永遠回不到返回門檻以下，
+    // 第一下之後就卡在 UP 再也計不到（見 `HighKneeSignal` 註解）。
+    var repSignals by remember { mutableStateOf<List<RepSignal>>(emptyList()) }
     var calibrationStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
     var calibrationSquatState by remember { mutableStateOf(SquatState.STAND) }
     var calibrationDepths by remember { mutableStateOf<List<Float>>(emptyList()) }
@@ -135,9 +138,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var calibrationRetryCount by remember { mutableIntStateOf(0) }
     var calibrationWarning by remember { mutableStateOf<String?>(null) }
 
-    var trainingStateMachine by remember { mutableStateOf<SquatStateMachine?>(null) }
-    // 達成率 p 的分母。深蹲家族是校正兩下基準動作得到的個人化深度 Duser；
-    // 其餘動作是 RepSignal.target（固定解剖學判準，如手腕舉到肩高）。
+    var trainingMachines by remember { mutableStateOf<List<SquatStateMachine>>(emptyList()) }
+    // 達成率 p 的分母，**只有深蹲家族會用到**：校正兩下基準動作得到的個人化深度 Duser。
+    // 其餘動作的分母是各自訊號的 `RepSignal.target`（固定解剖學判準），
+    // 在計次完成時直接從觸發的那台狀態機讀 —— 高抬腿左右腳的判準可能略有差異，
+    // 存一個全域值會把其中一腳算錯。
     // 兩者都寫進紀錄的 duser 欄位 —— 那個欄位的定義就是「p 的分母」，
     // 留空的話事後無從還原分子分母，M5 重新掃描門檻就做不了。
     var duser by remember { mutableStateOf<Float?>(null) }
@@ -359,7 +364,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             // 動作進行中本來就會讓關鍵點跑到畫面邊緣（舉手時手腕會接近甚至超出上緣），
             // 拿動作中的幀去判框位只會一直誤報 —— 實測時整場只聽得到「舉到肩膀就好」
             // 就是這樣來的。訓練尚未開始時沒有狀態機，一律視為靜止。
-            val atRest = trainingStateMachine?.state?.let { it == SquatState.STAND } ?: true
+            // 所有狀態機都在 STAND 才算靜止。高抬腿左右腳各一台，
+            // 只要有一腳還抬著就不該拿那一幀去判框位。
+            val atRest = trainingMachines.all { it.state == SquatState.STAND }
             // 框位引導同一個問題須連續穩定幾幀才算數，避免動作快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
             val currentFramingIssue =
                 if (atRest) evaluateFraming(frame, selectedExercise) else FramingIssue.OK
@@ -406,8 +413,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val startMs = standHoldStartMs ?: System.currentTimeMillis().also { standHoldStartMs = it }
                         standHoldElapsedMs = System.currentTimeMillis() - startMs
                         if (standHoldElapsedMs >= Config.STAND_HOLD_DURATION_MS) {
-                            val signal = calibrator.build()
-                            if (signal == null) {
+                            val signals = calibrator.build()
+                            if (signals.isEmpty()) {
                                 // 站姿量測無效，例如舉手動作在校正時就把手舉著，
                                 // 手腕沒有低於肩、判準會是 0 或負數。必須重來並說明原因 ——
                                 // 不說的話使用者會卡在「倒數結束了卻什麼都沒發生」的畫面。
@@ -415,21 +422,20 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                                 standCalibrator = null
                                 standHoldStartMs = null
                                 standHoldElapsedMs = 0L
-                                standCalibrationWarning = "請雙手自然下垂"
+                                standCalibrationWarning = calibrationHintFor(selectedExercise)
                             } else {
-                                repSignal = signal
+                                repSignals = signals
                                 standCalibrationWarning = null
-                                val fixedTarget = signal.target
-                                if (fixedTarget == null) {
+                                if (signals.first().target == null) {
                                     // 深蹲家族：分母是個人化的 Duser，還要再做兩下基準動作。
-                                    calibrationStateMachine = SquatStateMachine(signal)
+                                    // 深蹲家族只會有一個訊號。
+                                    calibrationStateMachine = SquatStateMachine(signals.first())
                                     flowStep = FlowStep.SQUAT_CALIBRATION
                                 } else {
-                                    // 其餘動作的判準是固定解剖學地標（手腕舉到肩高），
+                                    // 其餘動作的判準是固定解剖學地標（手腕舉到肩高、膝抬到髖高…），
                                     // 站姿校正本身就取得了分母，不需要兩下基準動作 ——
                                     // 也不該要求，對手臂動作而言「兩下基準深蹲」毫無意義。
-                                    duser = fixedTarget
-                                    trainingStateMachine = SquatStateMachine(signal)
+                                    trainingMachines = signals.map { SquatStateMachine(it) }
                                     flowStep = FlowStep.READY_COUNTDOWN
                                 }
                             }
@@ -452,7 +458,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val mean = depths.average().toFloat()
                         // 全距除以平均：兩下差太多代表其中一下是試探性的淺蹲，取平均當 Duser 不可信。
                         val spread = if (mean > 0f) (depths.max() - depths.min()) / mean else 0f
-                        val signal = repSignal
+                        val signal = repSignals.firstOrNull()
                         if (spread > Config.CALIBRATION_MAX_DEPTH_SPREAD &&
                             calibrationRetryCount < Config.CALIBRATION_MAX_RETRIES &&
                             signal != null
@@ -468,7 +474,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                             // Duser 會寫進每筆紀錄的 CSV，事後分析看得出這場校正品質不佳。
                             duser = mean
                             calibrationWarning = null
-                            trainingStateMachine = SquatStateMachine(signal)
+                            trainingMachines = listOf(SquatStateMachine(signal))
                             // 先進倒數而不是直接開始訓練，讓使用者知道從哪一下開始算數。
                             flowStep = FlowStep.READY_COUNTDOWN
                         }
@@ -476,14 +482,24 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 }
 
                 FlowStep.TRAINING -> {
-                    val sm = trainingStateMachine ?: return@PoseAnalyzer
-                    val previousRepCount = sm.repCount
-                    val newState = sm.update(smoothedByType)
-                    repCount = sm.repCount
-                    stateForLog = newState.name
-                    if (newState == SquatState.BOTTOM) {
-                        val dNow = sm.lastPeakProgress
-                        val dUser = duser
+                    val machines = trainingMachines
+                    if (machines.isEmpty()) return@PoseAnalyzer
+                    val previousRepCount = machines.sumOf { it.repCount }
+                    // 每台狀態機各自推進。高抬腿是左右腳各一台，彼此不互相影響 ——
+                    // 這正是「一下 = 單腳抬一次」能正確計數的原因。
+                    var bottomed: SquatStateMachine? = null
+                    machines.forEach { machine ->
+                        if (machine.update(smoothedByType) == SquatState.BOTTOM) {
+                            bottomed = machine
+                        }
+                    }
+                    repCount = machines.sumOf { it.repCount }
+                    stateForLog = machines.joinToString("/") { it.state.name }
+                    val triggered = bottomed
+                    if (triggered != null) {
+                        val dNow = triggered.lastPeakProgress
+                        // 深蹲家族用校正所得的 Duser，其餘動作用觸發那台狀態機自己的判準。
+                        val dUser = duser ?: triggered.signal.target
                         val kneeValgus = detectKneeValgus(smoothedByType)
                         val valgusRatio = kneeValgusRatio(smoothedByType)
                         kneeValgusFlag = kneeValgus == true
@@ -507,8 +523,9 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         }
                     }
                     // 計次在 UP → STAND 那一刻才 +1，此時才算這一下真正完成，寫入該次紀錄。
-                    if (sm.repCount > previousRepCount) {
-                        textToSpeech.value?.speak(sm.repCount.toString(), TextToSpeech.QUEUE_ADD, null, null)
+                    val currentRepCount = machines.sumOf { it.repCount }
+                    if (currentRepCount > previousRepCount) {
+                        textToSpeech.value?.speak(currentRepCount.toString(), TextToSpeech.QUEUE_ADD, null, null)
                         pendingRecord?.let { record ->
                             sessionRecords = sessionRecords + record
                             coroutineScope.launch(Dispatchers.IO) {
@@ -517,7 +534,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         }
                         pendingRecord = null
                     }
-                    Log.d(TAG, "state=$newState count=${sm.repCount} p=${duser?.let { d -> sm.lastPeakProgress?.div(d) }}")
+                    Log.d(TAG, "state=$stateForLog count=$currentRepCount")
                 }
             }
 
@@ -792,14 +809,14 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     exportFiles = emptyList()
                     repCount = 0
                     pendingRecord = null
-                    trainingStateMachine = null
+                    trainingMachines = emptyList()
                     calibrationStateMachine = null
                     calibrationDepths = emptyList()
                     calibrationSquatState = SquatState.STAND
                     calibrationRetryCount = 0
                     calibrationWarning = null
                     standCalibrator = null
-                    repSignal = null
+                    repSignals = emptyList()
                     standCalibrationWarning = null
                     duser = null
                     standHoldStartMs = null
@@ -891,6 +908,18 @@ private fun StandHoldOverlay(
             }
         }
     }
+}
+
+/**
+ * 站姿校正量測失敗時要說的話。
+ *
+ * 不能統一寫「請雙手自然下垂」—— 那只對手臂動作有意義，對原地高抬腿是錯的指示。
+ * 這跟當初把「蹲太淺了」念給舉手聽是同一類錯誤。
+ */
+private fun calibrationHintFor(exercise: ExerciseType): String = when (exercise) {
+    ExerciseType.ARM_RAISE, ExerciseType.CHEST_EXPANSION -> "請雙手自然下垂"
+    ExerciseType.HIGH_KNEES -> "請雙腳站地站直"
+    ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT, ExerciseType.HEEL_RAISE -> "請站直，全身入鏡"
 }
 
 /**

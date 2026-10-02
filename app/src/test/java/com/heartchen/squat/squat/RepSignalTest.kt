@@ -151,7 +151,7 @@ class RepSignalTest {
         // 手臂自然晃動：手腕在 690~710 之間，平均仍是 700
         listOf(690f, 710f, 695f, 705f, 700f).forEach { assertTrue(c.accumulate(upperBody(it))) }
         assertEquals(5, c.sampleCount)
-        val signal = c.build()!!
+        val signal = c.build().single()
         assertEquals(restDrop / shoulderWidth, signal.target!!, 1e-3f)
     }
 
@@ -164,13 +164,15 @@ class RepSignalTest {
     fun `校正時手已舉高則拒絕產生訊號`() {
         val c = ArmRaiseStandCalibrator()
         repeat(5) { c.accumulate(upperBody(shoulderY - 50f)) }   // 手腕高於肩
-        assertNull(c.build())
+        assertTrue(c.build().isEmpty())
     }
 
     @Test
     fun `沒有樣本時拒絕產生訊號`() {
-        assertNull(ArmRaiseStandCalibrator().build())
-        assertNull(LowerBodyStandCalibrator().build())
+        assertTrue(ArmRaiseStandCalibrator().build().isEmpty())
+        assertTrue(LowerBodyStandCalibrator().build().isEmpty())
+        assertTrue(ChestExpansionStandCalibrator().build().isEmpty())
+        assertTrue(HighKneesStandCalibrator().build().isEmpty())
     }
 
     @Test
@@ -301,7 +303,7 @@ class RepSignalTest {
         val c = ChestExpansionStandCalibrator()
         listOf(120f, 132f, 124f, 128f, 126f).forEach { assertTrue(c.accumulate(chest(it))) }
         assertEquals(5, c.sampleCount)
-        val built = c.build()!!
+        val built = c.build().single()
         assertEquals(chestSignal().target!!, built.target!!, 1e-2f)
         // 站姿腕距的平均值仍然會影響門檻（門檻以站姿為起點），只是不再影響 target
         assertEquals(chestSignal().enterThreshold, built.enterThreshold, 1e-2f)
@@ -316,7 +318,7 @@ class RepSignalTest {
         val c = ChestExpansionStandCalibrator()
         // 站姿腕距 400 > 判準腕距 319 → travel 為負，門檻會錯亂
         repeat(5) { c.accumulate(chest(400f)) }
-        assertNull(c.build())
+        assertTrue(c.build().isEmpty())
     }
 
     @Test
@@ -357,6 +359,152 @@ class RepSignalTest {
         assertEquals(1, m.repCount)
         val p = m.lastPeakProgress!! / signal.target!!
         assertTrue("幅度不足時 p 應低於入門綠燈門檻 0.90，實際 $p", p < 0.90f)
+    }
+
+    // ---- 原地高抬腿 ----
+
+    // 解剖學比例：腿長（髖-踝）400，大腿長（髖-膝）200 → target = 0.5
+    private val hkHipY = 600f
+    private val hkAnkleY = 1000f
+    private val hkKneeY = 800f
+    private val hkScale = hkAnkleY - hkHipY          // 400
+    private val hkTarget = (hkKneeY - hkHipY) / hkScale  // 0.5
+
+    /** 左右膝各自抬到指定高度（以站姿膝高往上的像素數表示）。 */
+    private fun knees(leftLift: Float, rightLift: Float): Map<KeyPointType, KeyPoint> = mapOf(
+        KeyPointType.LEFT_HIP to KeyPoint(KeyPointType.LEFT_HIP, 330f, hkHipY, 0.9f),
+        KeyPointType.RIGHT_HIP to KeyPoint(KeyPointType.RIGHT_HIP, 390f, hkHipY, 0.9f),
+        KeyPointType.LEFT_KNEE to KeyPoint(KeyPointType.LEFT_KNEE, 330f, hkKneeY - leftLift, 0.9f),
+        KeyPointType.RIGHT_KNEE to KeyPoint(KeyPointType.RIGHT_KNEE, 390f, hkKneeY - rightLift, 0.9f),
+        KeyPointType.LEFT_ANKLE to KeyPoint(KeyPointType.LEFT_ANKLE, 330f, hkAnkleY, 0.9f),
+        KeyPointType.RIGHT_ANKLE to KeyPoint(KeyPointType.RIGHT_ANKLE, 390f, hkAnkleY, 0.9f),
+    )
+
+    private fun hkSignals() = HighKneesStandCalibrator().also {
+        repeat(5) { _ -> it.accumulate(knees(0f, 0f)) }
+    }.build()
+
+    @Test
+    fun `高抬腿左右腳各產生一個訊號`() {
+        assertEquals(2, hkSignals().size)
+    }
+
+    @Test
+    fun `高抬腿判準是膝抬到髖高`() {
+        val left = hkSignals().first()
+        assertEquals(hkTarget, left.target!!, 1e-4f)
+        // 膝抬到髖高時進度正好等於判準
+        assertEquals(left.target!!, left.progress(knees(hkKneeY - hkHipY, 0f))!!, 1e-4f)
+        // 大腿長/腿長 ≈ 0.5，與其他動作的 target 同量級
+        assertTrue("target 應在 0.3~0.7，實際 ${left.target}", left.target!! in 0.3f..0.7f)
+    }
+
+    @Test
+    fun `高抬腿兩個訊號只各自讀自己那側的膝`() {
+        val (left, right) = hkSignals()
+        // 只抬左腳：左訊號有進度，右訊號維持 0
+        assertTrue(left.progress(knees(150f, 0f))!! > 0.3f)
+        assertEquals(0f, right.progress(knees(150f, 0f))!!, 1e-4f)
+    }
+
+    @Test
+    fun `高抬腿站姿時膝未低於髖則拒絕產生訊號`() {
+        val c = HighKneesStandCalibrator()
+        // 校正時膝已經抬到髖以上
+        repeat(5) { c.accumulate(knees(hkKneeY - hkHipY + 20f, hkKneeY - hkHipY + 20f)) }
+        assertTrue(c.build().isEmpty())
+    }
+
+    // 模擬 25fps 的交替踏步：每腳抬 10 幀、休息 10 幀（每腳 0.8 秒）。
+    // 關鍵是**一腳抬的時候另一腳在地上**，兩腳的半波連續鋪滿、中間沒有雙腳落地的空檔。
+    private val hkLiftFrames = 10
+    private val hkPeriod = 20
+
+    private fun marchLift(frame: Int, isLeft: Boolean, amplitude: Float): Float {
+        val x = frame % hkPeriod
+        val active = if (isLeft) x < hkLiftFrames else x >= hkLiftFrames
+        if (!active) return 0f
+        val phase = if (isLeft) x else x - hkLiftFrames
+        val peak = hkKneeY - hkHipY
+        return (kotlin.math.sin(kotlin.math.PI * phase / hkLiftFrames) * peak * amplitude)
+            .toFloat()
+    }
+
+    /**
+     * 這條是「一下 = 單腳抬一次」的核心保護。
+     *
+     * 左右交替踏步、兩腳的抬腿半波**連續鋪滿**（一腳落地的同時另一腳已抬起）。
+     * 若用「較高的那隻膝」當單一訊號，進度永遠湊不到連續
+     * [Config.STAND_STABLE_FRAMES] 幀低於返回門檻，第一下之後就卡在 UP ——
+     * 模擬 12 次抬腿只計到 1 下。左右各一台則彼此不受影響，12 次全中。
+     */
+    @Test
+    fun `交替踏步時左右各一台狀態機能正確計次，單一訊號會漏算`() {
+        val (leftSignal, rightSignal) = hkSignals()
+        val left = SquatStateMachine(leftSignal)
+        val right = SquatStateMachine(rightSignal)
+        // 對照組：餵「較高的那隻膝」給單一狀態機
+        val single = SquatStateMachine(leftSignal)
+
+        val cycles = 6
+        for (frame in 0 until cycles * hkPeriod) {
+            val l = marchLift(frame, isLeft = true, amplitude = 1f)
+            val r = marchLift(frame, isLeft = false, amplitude = 1f)
+            left.update(knees(l, r))
+            right.update(knees(l, r))
+            single.update(knees(maxOf(l, r), 0f))
+        }
+        // 結束時雙腳落地，讓進行中的那一下完成
+        repeat(12) {
+            left.update(knees(0f, 0f))
+            right.update(knees(0f, 0f))
+            single.update(knees(0f, 0f))
+        }
+
+        assertEquals(cycles, left.repCount)
+        assertEquals(cycles, right.repCount)
+        assertEquals(2 * cycles, left.repCount + right.repCount)
+        assertTrue(
+            "單一訊號應嚴重漏算（實際 ${single.repCount}，真實 ${2 * cycles}）",
+            single.repCount <= 2
+        )
+    }
+
+    @Test
+    fun `抬腿只到判準一半仍然計次，交給分級去判不夠高`() {
+        val (leftSignal, rightSignal) = hkSignals()
+        val left = SquatStateMachine(leftSignal)
+        val right = SquatStateMachine(rightSignal)
+        val cycles = 6
+        for (frame in 0 until cycles * hkPeriod) {
+            val l = marchLift(frame, isLeft = true, amplitude = 0.5f)
+            val r = marchLift(frame, isLeft = false, amplitude = 0.5f)
+            left.update(knees(l, r))
+            right.update(knees(l, r))
+        }
+        repeat(12) {
+            left.update(knees(0f, 0f))
+            right.update(knees(0f, 0f))
+        }
+        assertEquals(2 * cycles, left.repCount + right.repCount)
+        // 幅度只有一半，達成率應落在紅燈區（入門綠燈門檻 0.90）
+        assertTrue(
+            "半高抬腿的 p 應明顯低於 0.90，實際 ${left.lastPeakProgress!! / leftSignal.target!!}",
+            left.lastPeakProgress!! / leftSignal.target!! < 0.90f
+        )
+    }
+
+    @Test
+    fun `高抬腿抬得太低不會被計次`() {
+        val left = SquatStateMachine(hkSignals().first())
+        val peak = hkKneeY - hkHipY
+        repeat(4) {
+            // 只抬到判準的 25%，低於進場門檻 30%
+            listOf(0f, peak * 0.15f, peak * 0.25f, peak * 0.15f, 0f)
+                .forEach { left.update(knees(it, 0f)) }
+            repeat(6) { left.update(knees(0f, 0f)) }
+        }
+        assertEquals(0, left.repCount)
     }
 
     // ---- 端到端：狀態機數舉手 ----

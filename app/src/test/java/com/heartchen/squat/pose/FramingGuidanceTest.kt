@@ -203,6 +203,43 @@ class FramingGuidanceTest {
         )
     }
 
+    /**
+     * 框位分流只有一個依據：這個動作要不要看手腕。
+     * 這個判斷換過兩次 —— 先是比對集合是否等於 `UPPER_BODY`（改關鍵點就壞），
+     * 再是問「要不要腳踝」（原地高抬腿為了不讓抬起那腳的踝拖累品質檢查
+     * 刻意不宣告踝，會被誤判成上肢動作）。這條測試逐一驗證六個動作都分對。
+     */
+    @Test
+    fun `六個動作都分流到正確的框位判準`() {
+        val upperBodyExercises = setOf(ExerciseType.ARM_RAISE, ExerciseType.CHEST_EXPANSION)
+        ExerciseType.entries.forEach { exercise ->
+            if (exercise in upperBodyExercises) {
+                // 上肢判準：沒有腳踝也該是 OK
+                assertEquals(
+                    "${exercise.name} 應走上肢判準",
+                    FramingIssue.OK,
+                    evaluateFraming(upperBody(), exercise)
+                )
+            } else {
+                // 下肢判準：缺腳踝要提示，而不是去檢查手腕
+                assertEquals(
+                    "${exercise.name} 應走下肢判準",
+                    FramingIssue.OK,
+                    evaluateFraming(lowerBody(), exercise)
+                )
+                val noAnkles = frame(
+                    kp(KeyPointType.LEFT_HIP, 320f, 600f),
+                    kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+                )
+                assertEquals(
+                    "${exercise.name} 缺腳踝應提示 MISSING_ANKLE",
+                    FramingIssue.MISSING_ANKLE,
+                    evaluateFraming(noAnkles, exercise)
+                )
+            }
+        }
+    }
+
     @Test
     fun `沒有偵測到任何姿態時回報沒有偵測到人`() {
         assertEquals(FramingIssue.NO_POSE, evaluateFraming(null, ExerciseType.SQUAT))

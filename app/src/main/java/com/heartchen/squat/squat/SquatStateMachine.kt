@@ -23,7 +23,10 @@ import com.heartchen.squat.pose.KeyPointType
  * [RepSignal] 中的站立基準與比例尺來自站姿校正，此後整場訓練固定不變，
  * 確保達成率 p 的計算基準前後一致。
  */
-class SquatStateMachine(private val signal: RepSignal) {
+class SquatStateMachine(
+    /** 公開給呼叫端讀 [RepSignal.target]：計次完成時要用它當 p 的分母。 */
+    val signal: RepSignal
+) {
     var state: SquatState = SquatState.STAND
         private set
     var repCount: Int = 0

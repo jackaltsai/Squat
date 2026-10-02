@@ -183,6 +183,50 @@ class ChestExpansionSignal(
 }
 
 /**
+ * 原地高抬腿（單側）：進度 = 該側膝相對站姿的上抬量，以「髖-踝」垂直距離正規化。
+ *
+ * ### 左右腳各一個訊號、各一台狀態機
+ * 「一下」的定義是**單腳抬一次**（使用者 2026-10-02 決定）。
+ * 若用「較高的那隻膝」當單一訊號，兩腳的抬腿半波是**連續鋪滿**的 ——
+ * 一腳落地的同時另一腳已經抬起，進度永遠湊不到連續
+ * [Config.STAND_STABLE_FRAMES] 幀低於返回門檻，第一下之後就卡在 UP 出不來。
+ * 模擬 25fps、每腳 0.8~2.0 秒的七種節奏，單一訊號有六種是 **0 下**
+ * （唯一能動的是「每腳抬 40% 時間」那種雙腳落地有明顯空檔的節奏，
+ * 完全取決於使用者節奏，太脆弱）。左右各一台則全部正確。
+ *
+ * ### 判準是「膝抬到髖高」
+ * 大腿接近水平，是清楚的解剖學地標。[target] = 站姿「膝-髖」垂直距離 ÷ 腿長
+ * ≈ 大腿長/腿長 ≈ 0.5，與其他動作的 target 同量級。
+ *
+ * 髖的基準與比例尺都取**站姿校正值**而非逐幀值：抬腿時骨盆會輕微晃動，
+ * 用逐幀髖高當基準會讓同一個抬腿高度得到不同的進度。
+ */
+class HighKneeSignal(
+    /** 這個訊號負責哪一側（[KeyPointType.LEFT_KNEE] 或 [KeyPointType.RIGHT_KNEE]）。 */
+    private val knee: KeyPointType,
+    /** 校正時該側膝的 Y（像素）。 */
+    private val baselineKneeY: Float,
+    /** 校正時髖部的 Y（像素）。 */
+    private val baselineHipY: Float,
+    /** 校正時「髖-踝」垂直距離（像素），作為身體比例尺。 */
+    private val normalizeScale: Float,
+) : RepSignal {
+    override fun progress(points: Map<KeyPointType, KeyPoint>): Float? {
+        if (normalizeScale <= 0f) return null
+        val point = points[knee] ?: return null
+        // 影像座標 Y 向下為正：膝抬高時 y 變小，進度變大。
+        return (baselineKneeY - point.y) / normalizeScale
+    }
+
+    /** 膝抬到髖高（大腿水平）時的進度值。 */
+    override val target: Float = (baselineKneeY - baselineHipY) / normalizeScale
+
+    override val enterThreshold = target * Config.HIGH_KNEES_ENTER_FRACTION
+    override val turnConfirmRise = target * Config.HIGH_KNEES_TURN_CONFIRM_FRACTION
+    override val returnThreshold = target * Config.HIGH_KNEES_RETURN_FRACTION
+}
+
+/**
  * 站姿校正累加器：每個動作宣告自己要從站姿量什麼，量滿後產生對應的 [RepSignal]。
  *
  * 不能統一累加髖/踝/肩/腕四組 —— 品質檢查只保證「當前動作宣告需要的點」到齊，
@@ -195,8 +239,14 @@ interface StandCalibrator {
     /** 已累積的有效樣本數。 */
     val sampleCount: Int
 
-    /** 產生動作訊號。樣本不足或量測無效（如肩寬為 0）時回傳 null。 */
-    fun build(): RepSignal?
+    /**
+     * 產生動作訊號。失敗（樣本不足、量測無效）時回傳**空清單**。
+     *
+     * 回傳清單而非單一訊號，是因為左右交替的動作（原地高抬腿）必須左右各一個
+     * 獨立訊號、各一台狀態機 —— 用單一訊號會讓兩次抬腿併成一次甚至完全計不到
+     * （見 [HighKneeSignal] 的註解）。其餘動作回傳一個元素。
+     */
+    fun build(): List<RepSignal>
 }
 
 /** 深蹲家族：量髖部站立基準高度與「髖-踝」垂直距離。 */
@@ -223,11 +273,11 @@ class LowerBodyStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): RepSignal? {
-        val baseline = baselineY ?: return null
-        val scale = normalizeScale ?: return null
-        if (scale <= 0f) return null
-        return SquatSignal(baseline, scale)
+    override fun build(): List<RepSignal> {
+        val baseline = baselineY ?: return emptyList()
+        val scale = normalizeScale ?: return emptyList()
+        if (scale <= 0f) return emptyList()
+        return listOf(SquatSignal(baseline, scale))
     }
 }
 
@@ -250,14 +300,14 @@ class ArmRaiseStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): RepSignal? {
-        if (sampleCount == 0) return null
+    override fun build(): List<RepSignal> {
+        if (sampleCount == 0) return emptyList()
         val drop = dropSum / sampleCount
         val width = widthSum / sampleCount
         // 站姿時手腕必須確實低於肩：若使用者校正時就把手舉著，drop <= 0，
         // target 會是 0 或負數，之後每一下的 p 都會變成無意義的數字。
-        if (drop <= 0f || width <= 0f) return null
-        return ArmRaiseSignal(drop, width)
+        if (drop <= 0f || width <= 0f) return emptyList()
+        return listOf(ArmRaiseSignal(drop, width))
     }
 }
 
@@ -281,19 +331,64 @@ class ChestExpansionStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): RepSignal? {
-        if (sampleCount == 0) return null
+    override fun build(): List<RepSignal> {
+        if (sampleCount == 0) return emptyList()
         val separation = separationSum / sampleCount
         val width = widthSum / sampleCount
         val arm = armSum / sampleCount
         // 站姿時手腕必須確實低於肩（arm > 0）；若使用者校正時就把手張開或舉著，
         // 量到的站姿基準不可信，判準會變成 0 或負數，之後每一下的 p 都沒有意義。
-        if (width <= 0f || arm <= 0f) return null
+        if (width <= 0f || arm <= 0f) return emptyList()
         val signal = ChestExpansionSignal(separation, width, arm)
         // 站姿腕距已達或超過判準腕距時（例如校正時就把手張開），門檻會錯亂，
         // 之後每一下的計次與 p 都沒有意義。
-        if (!signal.isValid) return null
-        return signal
+        if (!signal.isValid) return emptyList()
+        return listOf(signal)
+    }
+}
+
+/**
+ * 原地高抬腿：量左右膝的站姿高度、髖部基準高度，以及腿長比例尺。
+ *
+ * 另外需要踝（算腿長），但踝**不在** `requiredPoints` 裡 ——
+ * 抬腿時被抬起那腳的踝最容易掉信心值，列入必要點會讓動作峰值的幀被整幀丟掉。
+ * 校正發生在靜止時，踝可靠；拿不到時這裡回傳 false 跳過該幀即可。
+ */
+class HighKneesStandCalibrator : StandCalibrator {
+    private var hipSum = 0f
+    private var ankleSum = 0f
+    private var leftKneeSum = 0f
+    private var rightKneeSum = 0f
+    override var sampleCount = 0
+        private set
+
+    override fun accumulate(points: Map<KeyPointType, KeyPoint>): Boolean {
+        val hipY = averageY(points, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP) ?: return false
+        val ankleY = averageY(points, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
+            ?: return false
+        val leftKnee = points[KeyPointType.LEFT_KNEE] ?: return false
+        val rightKnee = points[KeyPointType.RIGHT_KNEE] ?: return false
+        hipSum += hipY
+        ankleSum += ankleY
+        leftKneeSum += leftKnee.y
+        rightKneeSum += rightKnee.y
+        sampleCount += 1
+        return true
+    }
+
+    override fun build(): List<RepSignal> {
+        if (sampleCount == 0) return emptyList()
+        val hipY = hipSum / sampleCount
+        val scale = ankleSum / sampleCount - hipY
+        if (scale <= 0f) return emptyList()
+        val leftKneeY = leftKneeSum / sampleCount
+        val rightKneeY = rightKneeSum / sampleCount
+        // 站姿時膝必須確實低於髖，否則判準會是 0 或負數。
+        if (leftKneeY <= hipY || rightKneeY <= hipY) return emptyList()
+        return listOf(
+            HighKneeSignal(KeyPointType.LEFT_KNEE, leftKneeY, hipY, scale),
+            HighKneeSignal(KeyPointType.RIGHT_KNEE, rightKneeY, hipY, scale),
+        )
     }
 }
 
@@ -310,7 +405,8 @@ fun standCalibratorFor(exercise: ExerciseType): StandCalibrator? = when (exercis
     ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT -> LowerBodyStandCalibrator()
     ExerciseType.ARM_RAISE -> ArmRaiseStandCalibrator()
     ExerciseType.CHEST_EXPANSION -> ChestExpansionStandCalibrator()
-    ExerciseType.HIGH_KNEES, ExerciseType.HEEL_RAISE -> null
+    ExerciseType.HIGH_KNEES -> HighKneesStandCalibrator()
+    ExerciseType.HEEL_RAISE -> null
 }
 
 internal fun averageY(

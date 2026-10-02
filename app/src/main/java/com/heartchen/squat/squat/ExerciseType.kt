@@ -56,9 +56,13 @@ enum class ExerciseType(
 
     HIGH_KNEES(
         label = "原地高抬腿",
-        requiredPoints = KeyPointType.LOWER_BODY,
-        guidance = "原地踏步，輪流將膝蓋抬高。",
-        detectionImplemented = false,
+        // 只宣告訊號與校正真正會讀的髖與膝。踝雖然校正時會用到（算腿長），
+        // 但抬腿時被抬起那腳的踝最容易掉信心值，列入必要點會讓動作峰值的幀
+        // 被品質檢查整幀丟掉 —— 累加器自己會跳過缺踝的幀。
+        requiredPoints = KeyPointType.HIP_AND_KNEE,
+        // 「一下」是單腳抬一次，所以文案講「輪流」而不是「左右各一次算一下」。
+        guidance = "原地踏步，輪流把膝蓋抬高到腰的高度。",
+        detectionImplemented = true,
         feedback = FeedbackMessages("高度達標！", "膝蓋再抬高", "膝蓋抬太低"),
         iconRes = R.drawable.ic_exercise_high_knees,
         safetyNote = "覺得不穩就扶著椅背進行。",

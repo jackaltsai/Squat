@@ -33,7 +33,19 @@ enum class KeyPointType(val label: String) {
     ;
 
     companion object {
-        /** 深蹲家族（深蹲、坐站、高抬腿、踮腳尖）需要的下肢六點。 */
+        /**
+         * 原地高抬腿只需要髖與膝。
+         *
+         * 訊號只讀抬起那側的膝，站姿校正另外需要踝（算腿長比例尺），但校正發生在
+         * 靜止時、踝的信心值可靠，累加器自己會跳過缺點的幀。
+         * **抬腿過程中被抬起那腳的踝最容易掉信心值** —— 若把踝列入必要點，
+         * 那些幀會被品質檢查整幀丟掉，正好丟在動作峰值上（同 `ARM_RAISE` 的手肘）。
+         */
+        val HIP_AND_KNEE: Set<KeyPointType> = setOf(
+            LEFT_HIP, RIGHT_HIP, LEFT_KNEE, RIGHT_KNEE
+        )
+
+        /** 深蹲家族（深蹲、坐站、踮腳尖）需要的下肢六點。 */
         val LOWER_BODY: Set<KeyPointType> = setOf(
             LEFT_HIP, RIGHT_HIP, LEFT_KNEE, RIGHT_KNEE, LEFT_ANKLE, RIGHT_ANKLE
         )
