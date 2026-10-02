@@ -67,13 +67,18 @@ def split_sessions(df):
     # 時間隔太久、訓練模式換了、或動作換了，都視為新的一場
     new_session = (gap > SESSION_GAP_SECONDS) | (df["mode"] != df["mode"].shift())
     if "exerciseType" in df.columns:
-        new_session |= df["exerciseType"] != df["exerciseType"].shift()
+        # ⚠️ 必須先 fillna。pandas 裡 NaN != NaN 是 True，而把「有 exerciseType 的新檔」
+        # 和「沒有這個欄位的舊檔」一起讀進來時，舊檔那幾列整欄都是 NaN ——
+        # 直接比較會讓**每一列都被當成新的一場**（實測 260 下被切成 260 場）。
+        ex = df["exerciseType"].fillna("__UNKNOWN__")
+        new_session |= ex != ex.shift()
     df = df.assign(_session=new_session.cumsum())
     out = []
     for i, (_, d) in enumerate(df.groupby("_session"), start=1):
         # 動作名稱放進標籤：坐站與深蹲的 p 值分布完全不同（椅面固定了深度，
         # 2026-10-01 實測坐站 CV 4.5% vs 深蹲 20%），混在一起看會得到錯誤結論
-        ex = f" {d['exerciseType'].iloc[0]}" if "exerciseType" in d.columns else ""
+        raw_ex = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else None
+        ex = f" {raw_ex}" if isinstance(raw_ex, str) else ""
         label = f"{d['sourceFile'].iloc[0]} #{i}{ex} ({d['localTime'].iloc[0]})"
         out.append((label, d))
     return out
@@ -187,8 +192,10 @@ def main():
                     print(f"  {mark} 反推 手臂長/肩寬 = {ratio:.3f}"
                           f"（成人約 {ARM_TO_SHOULDER_EXPECTED}）")
                     if off > ARM_TO_SHOULDER_TOLERANCE:
-                        print(f"     明顯偏離 —— 站姿校正時手可能沒有自然下垂，"
-                              f"這一場的 p 值整體不可信")
+                        print(f"     偏離參考值 —— 站姿校正時手可能沒有自然下垂。"
+                              f"手臂長被低估會讓判準變小、整場 p 偏高")
+                        print(f"     （參考值目前只有少數場次可依據，容差 "
+                              f"±{ARM_TO_SHOULDER_TOLERANCE} 是暫定的）")
                 if p.mean() > SUSPECT_MEAN_P_HIGH:
                     print(f"  平均 p={p.mean():.2f} 高於判準 —— 幅度做得比判準大，"
                           f"若整場都綠代表判準偏鬆（見 Config 的 TARGET_FRACTION 註解）")
@@ -200,7 +207,11 @@ def main():
     for name, d in sessions:
         row = {
             "場次": name,
-            "動作": d["exerciseType"].iloc[0] if "exerciseType" in d.columns else "?",
+            "動作": (
+                d["exerciseType"].iloc[0]
+                if "exerciseType" in d.columns and isinstance(d["exerciseType"].iloc[0], str)
+                else "?"
+            ),
             "模式": d["mode"].iloc[0],
             "次數": len(d),
             "p平均": round(d["depthRatio"].mean(), 3),
