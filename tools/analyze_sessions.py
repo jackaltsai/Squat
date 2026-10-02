@@ -27,6 +27,28 @@ THRESHOLDS = {
 # 平均 p 落在這個範圍外，代表校正基準跟實際訓練深度落差太大，該場資料要打問號
 SUSPECT_MEAN_P_LOW, SUSPECT_MEAN_P_HIGH = 0.85, 1.15
 
+# 深蹲家族的 p 分母是「兩下基準動作取得的 Duser」；其餘動作的分母是固定解剖判準，
+# 診斷的方向完全不同，不能共用同一句話。
+SQUAT_FAMILY = {"SQUAT", "CHAIR_SQUAT"}
+
+# 上肢動作的 duser 可反推「手臂長 ÷ 肩寬」，據此檢查站姿校正品質。
+# 實測三場雙臂高舉量到 1.348 / 1.394 / 0.962，解剖學上成人約 1.4；
+# 明顯偏離代表站姿校正時手沒有自然下垂。
+ARM_TO_SHOULDER_EXPECTED = 1.37
+ARM_TO_SHOULDER_TOLERANCE = 0.25
+CHEST_TARGET_FRACTION_OF_FULL = 0.6
+
+
+def arm_to_shoulder_ratio(exercise, duser):
+    """從 duser 反推「手臂長 ÷ 肩寬」。無法反推時回傳 None。"""
+    if exercise == "ARM_RAISE":
+        # duser = 手臂長 / 肩寬
+        return duser
+    if exercise == "CHEST_EXPANSION" and duser > 1.0:
+        # duser = (肩寬 + 2×手臂長) × 0.6 / 肩寬　→　手臂長/肩寬 = (duser/0.6 − 1) / 2
+        return (duser / CHEST_TARGET_FRACTION_OF_FULL - 1) / 2
+    return None
+
 # squat_all_records_*.csv 把所有場次倒在同一個檔案裡，用相鄰兩下的時間間隔切開。
 # 一場訓練裡每下大約隔 3~10 秒，換場至少要重做站姿校正 3 秒 + 兩下校正深蹲 + 倒數，
 # 120 秒是保守的分界。
@@ -57,13 +79,55 @@ def split_sessions(df):
     return out
 
 
+# 從手機分享出來的 CSV 通常會落在這幾個地方，沒給參數時自動找。
+SEARCH_DIRS = ["", "~/Downloads", "~/Desktop", "~/Documents"]
+SESSION_GLOB = "squat_*records*.csv"
+SESSION_GLOB_ALT = "squat_session_*.csv"
+
+
+def autodiscover():
+    found = []
+    for d in SEARCH_DIRS:
+        base = os.path.expanduser(d)
+        for pattern in (SESSION_GLOB, SESSION_GLOB_ALT):
+            found += glob.glob(os.path.join(base, pattern))
+    return sorted(set(found), key=os.path.getmtime)
+
+
 def collect(paths):
     files = []
+    missing = []
     for path in paths:
-        if os.path.isdir(path):
-            files += sorted(glob.glob(os.path.join(path, "*.csv")))
+        expanded = os.path.expanduser(path)
+        if os.path.isdir(expanded):
+            files += sorted(glob.glob(os.path.join(expanded, "*.csv")))
+        elif any(c in expanded for c in "*?["):
+            hits = sorted(glob.glob(expanded))
+            files += hits
+            if not hits:
+                missing.append(path)
+        elif os.path.isfile(expanded):
+            files.append(expanded)
         else:
-            files.append(path)
+            missing.append(path)
+    for m in missing:
+        print(f"找不到：{m}")
+    if not files:
+        files = autodiscover()
+        if files:
+            print(f"自動找到 {len(files)} 個訓練紀錄 CSV：")
+            for f in files:
+                print(f"  {f}")
+            print()
+        else:
+            print("在以下位置都找不到訓練紀錄 CSV：")
+            for d in SEARCH_DIRS:
+                print(f"  {os.path.expanduser(d) or os.getcwd()}")
+            print()
+            print("取得方式：訓練結束畫面按分享，把 squat_session_*.csv 或")
+            print("squat_all_records_*.csv 傳到電腦（逐幀的 squat_frames_*.csv")
+            print("請改用 tools/analyze_frames.py）。")
+            sys.exit(1)
     frames = []
     for f in files:
         df = pd.read_csv(f)
@@ -75,8 +139,6 @@ def collect(paths):
 
 
 def main():
-    if len(sys.argv) < 2:
-        sys.exit(__doc__)
     df = collect(sys.argv[1:])
     has_raw = "duser" in df.columns
 
@@ -107,10 +169,29 @@ def main():
         if has_raw and d["duser"].notna().any():
             du = d["duser"].dropna().unique()
             print(f"  Duser = {', '.join(f'{v:.4f}' for v in du)}")
-            if p.mean() > SUSPECT_MEAN_P_HIGH:
-                print(f"  ⚠️  平均 p={p.mean():.2f} 偏高 —— 校正深蹲可能蹲得太淺，Duser 被拉低，綠燈是假性達標")
-            elif p.mean() < SUSPECT_MEAN_P_LOW:
-                print(f"  ⚠️  平均 p={p.mean():.2f} 偏低 —— 校正深蹲可能過深，或訓練時明顯偷懶")
+            exercise = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else "SQUAT"
+            if exercise in SQUAT_FAMILY:
+                if p.mean() > SUSPECT_MEAN_P_HIGH:
+                    print(f"  ⚠️  平均 p={p.mean():.2f} 偏高 —— 兩下基準動作可能做得太淺，"
+                          f"Duser 被拉低，綠燈是假性達標")
+                elif p.mean() < SUSPECT_MEAN_P_LOW:
+                    print(f"  ⚠️  平均 p={p.mean():.2f} 偏低 —— 兩下基準動作可能過深，"
+                          f"或訓練時明顯偷懶")
+            else:
+                # 非深蹲家族的分母是固定解剖判準，不是基準動作，所以 p 偏高只代表
+                # 幅度做得比判準大，不是校正出問題 —— 但可以反推解剖比例來查校正品質。
+                ratio = arm_to_shoulder_ratio(exercise, float(du[0]))
+                if ratio is not None:
+                    off = abs(ratio - ARM_TO_SHOULDER_EXPECTED)
+                    mark = "⚠️ " if off > ARM_TO_SHOULDER_TOLERANCE else "✅"
+                    print(f"  {mark} 反推 手臂長/肩寬 = {ratio:.3f}"
+                          f"（成人約 {ARM_TO_SHOULDER_EXPECTED}）")
+                    if off > ARM_TO_SHOULDER_TOLERANCE:
+                        print(f"     明顯偏離 —— 站姿校正時手可能沒有自然下垂，"
+                              f"這一場的 p 值整體不可信")
+                if p.mean() > SUSPECT_MEAN_P_HIGH:
+                    print(f"  平均 p={p.mean():.2f} 高於判準 —— 幅度做得比判準大，"
+                          f"若整場都綠代表判準偏鬆（見 Config 的 TARGET_FRACTION 註解）")
         else:
             print("  ⚠️  這份 CSV 沒有 duser / dNow 欄位（v3 以前的舊格式），無法診斷校正品質")
 
