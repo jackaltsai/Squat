@@ -209,20 +209,63 @@ class RepSignalTest {
         ChestExpansionSignal(ceRestSeparation, ceShoulderWidth, ceArmLength)
 
     @Test
-    fun `擴胸站姿時進度為零`() {
-        assertEquals(0f, chestSignal().progress(chest(ceRestSeparation))!!, 1e-4f)
+    fun `擴胸的進度是絕對腕距，站姿時等於站姿腕距除以肩寬`() {
+        // 進度刻意**不**扣掉站姿腕距：扣掉的話 p 的分母會含有一個姿勢選擇
+        assertEquals(
+            ceRestSeparation / ceShoulderWidth,
+            chestSignal().progress(chest(ceRestSeparation))!!,
+            1e-4f
+        )
     }
 
     @Test
     fun `擴胸判準由肩寬與手臂長算出，不是寫死的距離`() {
         // 幾何最大側展腕距 = 肩寬 + 2×手臂長 = 140 + 392 = 532
-        // 判準腕距 = 532 × 0.6 = 319.2　→　target = (319.2 − 126) / 140 ≈ 1.38
+        // 判準腕距 = 532 × 0.6 = 319.2　→　target = 319.2 / 140 = 2.28
         val full = ceShoulderWidth + 2f * ceArmLength
-        val expected = (full * 0.6f - ceRestSeparation) / ceShoulderWidth
-        assertEquals(expected, chestSignal().target!!, 1e-4f)
-        // 與雙臂高舉的 target（約 1.4 個肩寬）同量級，門檻才能沿用同一組比例
-        assertTrue("target 應在 1.2~1.6 之間，實際 ${chestSignal().target}",
-            chestSignal().target!! in 1.2f..1.6f)
+        assertEquals(full * 0.6f / ceShoulderWidth, chestSignal().target!!, 1e-4f)
+    }
+
+    /**
+     * 這條是這次修正的核心：`p = 峰值腕距 / 判準腕距`，判準只含解剖量。
+     * 原本進度扣掉站姿腕距，`p = (峰值 − 站姿) / (判準 − 站姿)`，分母含有
+     * 「手垂下時離身體多遠」這個姿勢選擇 —— 2026-10-02 實機那場站姿腕距約
+     * 1.48 個肩寬，同樣「打開到最大側展 75%」得到 p = 1.73，若站姿腕距是 0.90
+     * 則只得到 p = 1.41，在 55% 處更是一個 RED 一個 YELLOW。p 因此不可跨受試者比較。
+     */
+    @Test
+    fun `判準不受站姿腕距影響，同一幅度在不同站姿下得到同一個達成率`() {
+        val narrow = ChestExpansionSignal(100f, ceShoulderWidth, ceArmLength)
+        val wide = ChestExpansionSignal(200f, ceShoulderWidth, ceArmLength)
+        assertEquals(narrow.target!!, wide.target!!, 1e-4f)
+
+        // 同一個絕對腕距（打開到 300px）在兩種站姿下必須得到同一個 p
+        val pNarrow = narrow.progress(chest(300f))!! / narrow.target!!
+        val pWide = wide.progress(chest(300f))!! / wide.target!!
+        assertEquals(pNarrow, pWide, 1e-4f)
+    }
+
+    /**
+     * 狀態機的門檻換算回**絕對腕距**後，必須與「進度相對站姿」的舊寫法完全相同 ——
+     * 計次行為已經實機驗證過（15 下全中），這次只改 p 的算法，不能動到它。
+     */
+    @Test
+    fun `三個門檻換算回絕對腕距與舊寫法一致`() {
+        val signal = chestSignal()
+        val travel = signal.target!! - ceRestSeparation / ceShoulderWidth
+        // 舊寫法：enter = 0.30 × travel（相對站姿）→ 絕對腕距 = 站姿 + 0.30 × travel × 肩寬
+        assertEquals(
+            ceRestSeparation + 0.30f * travel * ceShoulderWidth,
+            signal.enterThreshold * ceShoulderWidth,
+            1e-2f
+        )
+        assertEquals(
+            ceRestSeparation + 0.20f * travel * ceShoulderWidth,
+            signal.returnThreshold * ceShoulderWidth,
+            1e-2f
+        )
+        // 轉折量是「回退多少」的差值，沒有起點偏移，兩種寫法本來就相同
+        assertEquals(0.08f * travel, signal.turnConfirmRise, 1e-4f)
     }
 
     @Test
@@ -234,15 +277,16 @@ class RepSignalTest {
     }
 
     /**
-     * 推掌（雙手在身前併攏）時腕距比站姿更小，進度為**負值**。
-     * 這是刻意的：推掌在正面視角量不到，它在這個模型裡就是這一下的返回階段，
-     * 負的進度自然滿足返回條件。
+     * 推掌（雙手在身前併攏）時腕距比站姿更小，進度低於返回門檻。
+     * 推掌在正面視角量不到，它在這個模型裡就是這一下的返回階段。
      */
     @Test
-    fun `雙手在身前併攏時進度為負`() {
-        val p = chestSignal().progress(chest(40f))!!
-        assertTrue("併攏時進度應為負，實際 $p", p < 0f)
-        assertTrue("併攏也應低於返回門檻", p < chestSignal().returnThreshold)
+    fun `雙手在身前併攏時進度低於返回門檻`() {
+        val signal = chestSignal()
+        val p = signal.progress(chest(40f))!!
+        assertTrue("併攏時進度 $p 應低於站姿進度", p < ceRestSeparation / ceShoulderWidth)
+        assertTrue("併攏時進度 $p 應低於返回門檻 ${signal.returnThreshold}",
+            p < signal.returnThreshold)
     }
 
     @Test
@@ -257,7 +301,10 @@ class RepSignalTest {
         val c = ChestExpansionStandCalibrator()
         listOf(120f, 132f, 124f, 128f, 126f).forEach { assertTrue(c.accumulate(chest(it))) }
         assertEquals(5, c.sampleCount)
-        assertEquals(chestSignal().target!!, c.build()!!.target!!, 1e-2f)
+        val built = c.build()!!
+        assertEquals(chestSignal().target!!, built.target!!, 1e-2f)
+        // 站姿腕距的平均值仍然會影響門檻（門檻以站姿為起點），只是不再影響 target
+        assertEquals(chestSignal().enterThreshold, built.enterThreshold, 1e-2f)
     }
 
     /**
@@ -267,7 +314,7 @@ class RepSignalTest {
     @Test
     fun `擴胸校正時手已張開則拒絕產生訊號`() {
         val c = ChestExpansionStandCalibrator()
-        // 站姿腕距 400 > 判準腕距 319
+        // 站姿腕距 400 > 判準腕距 319 → travel 為負，門檻會錯亂
         repeat(5) { c.accumulate(chest(400f)) }
         assertNull(c.build())
     }

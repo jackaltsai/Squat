@@ -108,18 +108,35 @@ class ArmRaiseSignal(
 }
 
 /**
- * 擴胸推掌：進度 = 左右手腕的水平間距相對站姿的增加量，以**校正時的肩寬**正規化。
+ * 擴胸推掌：進度 = 左右手腕的水平間距，以**校正時的肩寬**正規化。
  *
  * ### 為什麼量腕距，而不量「推掌」
  * 單一前視角相機看不到深度。**向前推掌時手往鏡頭方向伸，2D 投影幾乎不動**，
  * 根本量不到。可靠量到的只有「雙臂向兩側打開」那一半 —— 而那恰好就是擴胸本身。
- * 收回（推掌）是這一下的返回階段：雙手在身前併攏時腕距比站姿更小，進度會變負，
- * 自然滿足返回條件。
+ * 收回（推掌）是這一下的返回階段：雙手在身前併攏時腕距比站姿更小，
+ * 進度掉到返回門檻以下，自然完成計次。
+ *
+ * ### 進度是「絕對腕距」，不是「相對站姿的增加量」
+ * ⚠️ 原本進度取 `(腕距 − 站姿腕距)`，於是
+ * `p = (峰值 − 站姿) / (判準 − 站姿)` —— **分母含有一個姿勢選擇**
+ * （手垂下時離身體多遠）。站姿腕距離判準越近，分母越小，p 就被放大：
+ * 2026-10-02 實機那場站姿腕距約 1.48 個肩寬，同樣「打開到最大側展 75%」的動作
+ * 得到 p = 1.73，若站姿腕距是 0.90 則只得到 p = 1.41；在 55% 處更是一個 RED
+ * 一個 YELLOW。**p 因此不可跨受試者比較**，對論文第四章是方法學問題。
+ *
+ * 改成絕對腕距後 `p = 峰值腕距 / 判準腕距`，完全不含站姿項，
+ * p 就是「打開的幅度佔判準的幾成」，同一個幅度永遠得到同一個 p。
+ *
+ * **狀態機的行為完全不變** —— 三個門檻改為「以站姿為起點、往判準方向的比例」，
+ * 換算回絕對腕距與改動前完全相同的像素值，所以已實機驗證過的計次不受影響。
  *
  * ### 判準錨在使用者自己的解剖尺寸上
- * 幾何最大間距 = 肩寬 + 2 × 手臂長（雙臂完全側平舉時的腕距），兩個量都在站姿校正時量到。
+ * 幾何最大側展腕距 = 肩寬 + 2 × 手臂長（雙臂完全側平舉時的腕距），兩個量都在站姿校正時量到。
  * [target] 取其 [Config.CHEST_EXPANSION_TARGET_FRACTION_OF_FULL]，所以 `p = 1.0`
- * 代表「打開到自己最大側展幅度的六成」，而不是一個憑感覺訂的絕對距離。
+ * 代表「打開到自己最大側展幅度的六成」。
+ *
+ * 副作用（好的）：寫進紀錄的 `duser` 現在只含解剖量，
+ * 可反推 `手臂長/肩寬 = (duser / 0.6 − 1) / 2`，事後分析看得出校正品質。
  *
  * 與 [ArmRaiseSignal] 一樣用**校正時的**肩寬而非逐幀肩寬：使用者稍微側身時
  * 逐幀肩寬會縮小，比值被放大、憑空多出達成率。
@@ -132,21 +149,37 @@ class ChestExpansionSignal(
     /** 校正時的手臂長，即站姿「手腕 Y − 肩 Y」（像素）。 */
     private val armLength: Float,
 ) : RepSignal {
+    /** 站姿時的進度值。進度是絕對腕距，所以站姿**不是 0**，三個門檻都要以它為起點。 */
+    private val restProgress = if (shoulderWidth > 0f) restSeparation / shoulderWidth else 0f
+
+    /** 判準腕距（以肩寬正規化）：幾何最大側展的設定比例。只含解剖量，不含站姿項。 */
+    override val target: Float =
+        if (shoulderWidth > 0f) {
+            (shoulderWidth + 2f * armLength) *
+                Config.CHEST_EXPANSION_TARGET_FRACTION_OF_FULL / shoulderWidth
+        } else {
+            0f
+        }
+
+    /** 從站姿走到判準的距離。三個門檻都是它的比例，確保換算回像素與改動前一致。 */
+    private val travel = target - restProgress
+
     override fun progress(points: Map<KeyPointType, KeyPoint>): Float? {
         if (shoulderWidth <= 0f) return null
         val left = points[KeyPointType.LEFT_WRIST] ?: return null
         val right = points[KeyPointType.RIGHT_WRIST] ?: return null
-        return (kotlin.math.abs(left.x - right.x) - restSeparation) / shoulderWidth
+        return kotlin.math.abs(left.x - right.x) / shoulderWidth
     }
 
-    /** 腕距達到「幾何最大側展幅度 × 設定比例」時的進度值。 */
-    override val target: Float =
-        ((shoulderWidth + 2f * armLength) * Config.CHEST_EXPANSION_TARGET_FRACTION_OF_FULL -
-            restSeparation) / shoulderWidth
+    override val enterThreshold = restProgress + travel * Config.CHEST_EXPANSION_ENTER_FRACTION
+    override val turnConfirmRise = travel * Config.CHEST_EXPANSION_TURN_CONFIRM_FRACTION
+    override val returnThreshold = restProgress + travel * Config.CHEST_EXPANSION_RETURN_FRACTION
 
-    override val enterThreshold = target * Config.CHEST_EXPANSION_ENTER_FRACTION
-    override val turnConfirmRise = target * Config.CHEST_EXPANSION_TURN_CONFIRM_FRACTION
-    override val returnThreshold = target * Config.CHEST_EXPANSION_RETURN_FRACTION
+    /**
+     * 站姿腕距必須確實小於判準腕距，否則 [travel] 會是 0 或負數、門檻全部錯亂。
+     * 典型情形是使用者在站姿校正時就把手張開。
+     */
+    val isValid: Boolean get() = shoulderWidth > 0f && armLength > 0f && travel > 0f
 }
 
 /**
@@ -257,9 +290,9 @@ class ChestExpansionStandCalibrator : StandCalibrator {
         // 量到的站姿基準不可信，判準會變成 0 或負數，之後每一下的 p 都沒有意義。
         if (width <= 0f || arm <= 0f) return null
         val signal = ChestExpansionSignal(separation, width, arm)
-        // 站姿腕距已經超過判準腕距時 target 會是 0 或負數（例如校正時就把手張開），
-        // 那之後每一下的 p 都沒有意義。
-        if (signal.target <= 0f) return null
+        // 站姿腕距已達或超過判準腕距時（例如校正時就把手張開），門檻會錯亂，
+        // 之後每一下的計次與 p 都沒有意義。
+        if (!signal.isValid) return null
         return signal
     }
 }
