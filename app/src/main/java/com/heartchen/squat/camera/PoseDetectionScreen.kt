@@ -51,6 +51,7 @@ import com.heartchen.squat.debug.FrameLogger
 import com.heartchen.squat.debug.SessionExporter
 import com.heartchen.squat.pose.EmaSmoother
 import com.heartchen.squat.pose.FramingIssue
+import com.heartchen.squat.pose.KeyPointType
 import com.heartchen.squat.pose.PoseAnalyzer
 import com.heartchen.squat.pose.PoseConfidenceList
 import com.heartchen.squat.pose.PoseFrame
@@ -165,13 +166,18 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態），一般使用者不需要開啟。
     var debugMode by remember { mutableStateOf(false) }
     var frameLogger by remember { mutableStateOf<FrameLogger?>(null) }
+    // 每按一次「停止」就 +1，用來逼 DisposableEffect 重建一個新的逐幀檔。
+    // 研究模式開著就該**每一場**都錄到，不是只錄開關打開後的那一場（見 stopTraining）。
+    var frameLogSession by remember { mutableIntStateOf(0) }
+    // 這次停止時，逐幀檔實際錄到幾幀。0 = 這場沒有逐幀資料。
+    var exportFrameCount by remember { mutableIntStateOf(0) }
     var framingIssue by remember { mutableStateOf(FramingIssue.OK) }
 
     val database = remember { SquatDatabase.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
 
     // 除錯模式開啟時才建立 CSV 紀錄檔；關閉或離開畫面時 flush + 關閉檔案，避免資料遺失。
-    DisposableEffect(debugMode) {
+    DisposableEffect(debugMode, frameLogSession) {
         if (debugMode) {
             frameLogger = FrameLogger(context)
         }
@@ -329,15 +335,22 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
 
     // 停止訓練：關掉逐幀 CSV（flush 到檔案）、把本次每下紀錄另外寫成一份 session CSV，
     // 然後停在結束摘要畫面讓使用者決定要不要分享。
-    // 一併把 debugMode 關掉，維持「除錯模式開 ⇔ 有 frameLogger」的一致性；
-    // 下一輪訓練要記錄逐幀資料的話再開一次即可。
+    //
+    // ⚠️ **不**把 debugMode 關掉。原本為了維持「除錯模式開 ⇔ 有 frameLogger」而順手關掉，
+    // 代價是研究者每錄一場都得回選單重開一次開關，忘了就**靜默沒有逐幀資料** ——
+    // 2026-10-02 連續兩場踮腳尖錄影就是這樣只剩 session CSV。
+    // 改為把那條不變式維持在「debugMode 開 ⇔ 有 frameLogger，每場一個新檔」：
+    // frameLogSession +1 會讓 DisposableEffect 重跑並開一個新檔。
     val stopTraining: () -> Unit = {
-        frameLogger?.close()
-        val frameCsv = frameLogger?.filePath?.let { File(it) }
+        val logger = frameLogger
+        logger?.close()
+        val frameCsv = logger?.filePath?.let { File(it) }
+        exportFrameCount = logger?.frameCount ?: 0
         frameLogger = null
-        debugMode = false
+        frameLogSession++
         val sessionCsv = SessionExporter.writeSessionCsv(context, sessionRecords)
-        exportFiles = listOfNotNull(sessionCsv, frameCsv?.takeIf { it.exists() && it.length() > 0 })
+        // 只有表頭的空檔不要塞進分享清單 —— 多一個空檔只會讓人以為錄到了。
+        exportFiles = listOfNotNull(sessionCsv, frameCsv?.takeIf { exportFrameCount > 0 })
         depthFeedback = null
         kneeValgusFlag = false
         flowStep = FlowStep.FINISHED
@@ -629,7 +642,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 text = if (currentFrame == null) {
                     "偵測不到關鍵點"
                 } else {
-                    "已偵測 ${currentFrame.keyPoints.size}/6 個關鍵點"
+                    "已偵測 ${currentFrame.keyPoints.size}/${KeyPointType.entries.size} 個關鍵點"
                 },
                 color = Color.White,
                 modifier = Modifier
@@ -817,6 +830,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             FlowStep.FINISHED -> SessionSummaryOverlay(
                 records = sessionRecords,
                 hasExport = exportFiles.isNotEmpty(),
+                frameCount = exportFrameCount,
+                debugMode = debugMode,
                 onShare = { SessionExporter.share(context, exportFiles) },
                 onExportAll = exportAllHistory,
                 onRestart = {
@@ -824,6 +839,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     // 因為手機位置/使用者站位很可能已經移動過了。
                     sessionRecords = emptyList()
                     exportFiles = emptyList()
+                    exportFrameCount = 0
                     repCount = 0
                     pendingRecord = null
                     trainingMachines = emptyList()
@@ -969,6 +985,18 @@ private fun ReadyCountdownOverlay(text: String) {
 }
 
 /**
+ * 結束摘要上那一行「這次到底錄到什麼」。
+ *
+ * 研究模式的逐幀 CSV 是 M5 要拿來跟人工標註比對的唯一資料來源，
+ * 錄沒錄到不該等到檔案傳到電腦、跑了分析腳本才發現。
+ */
+private fun frameLogStatus(frameCount: Int, debugMode: Boolean): String = when {
+    frameCount > 0 -> "含逐幀資料 $frameCount 幀（兩個檔案都要傳）"
+    debugMode -> "⚠️ 研究模式開著，但這場一幀都沒錄到"
+    else -> "⚠️ 只有每下紀錄，沒有逐幀資料（研究模式沒開）"
+}
+
+/**
  * 按下「停止」後的結束摘要：本次統計 + 分享研究資料。
  *
  * 分享一律走系統分享選單，由使用者自己挑收件者（見 [SessionExporter] 的說明），
@@ -978,6 +1006,8 @@ private fun ReadyCountdownOverlay(text: String) {
 private fun SessionSummaryOverlay(
     records: List<SquatRepRecord>,
     hasExport: Boolean,
+    frameCount: Int,
+    debugMode: Boolean,
     onShare: () -> Unit,
     onExportAll: () -> Unit,
     onRestart: () -> Unit
@@ -1025,6 +1055,14 @@ private fun SessionSummaryOverlay(
                         .padding(vertical = 14.dp)
                 )
                 Text(
+                    // 分享裡有幾個檔、逐幀錄到幾幀，在**按下分享之前**就要看得到。
+                    // 之前只寫「分享研究資料（CSV）」，結果傳出去才發現逐幀檔根本沒產生。
+                    text = frameLogStatus(frameCount, debugMode),
+                    color = if (frameCount > 0) Color(0xFF69F0AE) else Color(0xFFFFAB40),
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+                Text(
                     text = "會開啟系統分享選單，由你自己選擇要傳給誰。\nApp 不會自動上傳或寄出任何資料。",
                     color = Color.Gray,
                     fontSize = 12.sp,
@@ -1032,7 +1070,8 @@ private fun SessionSummaryOverlay(
                 )
             } else {
                 Text(
-                    text = "本次沒有完成任何一下，沒有可匯出的資料。",
+                    text = "本次沒有完成任何一下，也沒有逐幀資料，沒有可匯出的檔案。\n"
+                        + "要錄研究用的逐幀 CSV，請回選擇動作畫面打開「研究模式」。",
                     color = Color.Gray,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center

@@ -56,6 +56,16 @@ class FrameLogger(context: Context) {
 
     val filePath: String get() = file.absolutePath
 
+    /**
+     * 實際寫進檔案的資料列數（不含表頭）。
+     *
+     * 給結束摘要用：使用者（研究者）在按下分享**之前**就該看得到這場到底錄到幾幀。
+     * 2026-10-02 連續兩場踮腳尖錄影只傳回 session CSV、逐幀檔不見蹤影，
+     * 而畫面上的「分享研究資料（CSV）」對「有沒有錄到」一個字都沒說。
+     */
+    var frameCount: Int = 0
+        private set
+
     private fun buildHeader(): String {
         val cols = mutableListOf(
             "frameTimestampMs", "exerciseType", "state", "qualityOk", "framingIssue"
@@ -102,6 +112,7 @@ class FrameLogger(context: Context) {
         try {
             writer.write(values.joinToString(","))
             writer.newLine()
+            frameCount++
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write frame log", e)
         }
