@@ -23,6 +23,7 @@ import sys
 CONFIDENCE_THRESHOLD = 0.6
 
 LOWER = ["LEFT_HIP", "RIGHT_HIP", "LEFT_KNEE", "RIGHT_KNEE", "LEFT_ANKLE", "RIGHT_ANKLE"]
+FOOT = ["LEFT_HEEL", "RIGHT_HEEL", "LEFT_TOE", "RIGHT_TOE"]
 UPPER = ["LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_ELBOW", "RIGHT_ELBOW",
          "LEFT_WRIST", "RIGHT_WRIST"]
 
@@ -73,6 +74,7 @@ def report(path):
         print("   被品質檢查擋下的幀沒有被記錄，掉幀率只能從時間戳空隙推估，")
         print("   也看不出是哪個關鍵點造成的。請用新版 App 重錄。")
 
+    missing_foot = [p for p in FOOT if not present(rows, p)]
     missing_upper = [p for p in UPPER if not present(rows, p)]
     if missing_upper:
         print(f"\n⚠️  這份 CSV 缺少上肢關鍵點：{', '.join(missing_upper)}")
@@ -140,6 +142,14 @@ def report(path):
                   for i in range(len(ts) - 1) if (ts[i + 1] - ts[i]) > 1.5 * med)
         print(f"  推估被擋下約 {est} 幀（由時間戳空隙推算，非實測）")
 
+    # ---- 腳部：踮腳尖可行性 ----
+    if not missing_foot:
+        heel_raise_report(rows, has_quality)
+    else:
+        print("\n【踮腳尖訊號可行性】")
+        print(f"  這份 CSV 缺少腳部關鍵點：{', '.join(missing_foot)}")
+        print("  請用新版 App（2026-10-02 之後）重錄，才會記錄腳跟與腳尖。")
+
     # ---- 上肢：進度軌跡 ----
     if not missing_upper:
         print("\n【雙臂高舉的進度軌跡】")
@@ -203,6 +213,76 @@ def report(path):
             below = sum(1 for x in v if x < CONFIDENCE_THRESHOLD)
             print(f"    進度 {b:5.2f}　幀數 {len(v):5}　手腕信心中位數 {st.median(v):.3f}　"
                   f"低於門檻 {below/len(v):.0%}")
+
+
+def heel_raise_report(rows, has_quality):
+    """踮腳尖的可行性診斷：腳跟/腳尖信心值夠不夠、位移有沒有高過雜訊。"""
+    print("\n【踮腳尖訊號可行性】")
+    good = [r for r in rows if not has_quality or r["qualityOk"].lower() == "true"]
+    if not good:
+        good = rows
+
+    print("  腳部關鍵點的信心值：")
+    usable = True
+    for point in FOOT:
+        vals = [v for v in (fnum(r, f"{point}_raw_confidence") for r in rows) if v is not None]
+        if not vals:
+            print(f"    {point:12} 沒有資料")
+            usable = False
+            continue
+        above = sum(1 for v in vals if v >= CONFIDENCE_THRESHOLD)
+        print(f"    {point:12} 中位數 {st.median(vals):.3f}　"
+              f"達門檻 {above/len(vals):.0%}　最低 {min(vals):.3f}")
+        if above / len(vals) < 0.8:
+            usable = False
+    if not usable:
+        print("\n  ⚠️  腳部關鍵點的信心值不足，以腳跟/腳尖為訊號不可行。")
+        print("     改用「髖或踝的上升量」會被身體晃動污染，需要另想判準。")
+
+    # 腳跟相對腳尖的垂直落差（局部量測，不受身體晃動影響）
+    def heel_above_toe(row, side):
+        heel = fnum(row, f"{side}_HEEL_raw_y")
+        toe = fnum(row, f"{side}_TOE_raw_y")
+        if heel is None or toe is None:
+            return None
+        return toe - heel          # 腳跟抬起 → heel 的 y 變小 → 值變大
+
+    scale_vals = []
+    for r in good:
+        hip = fnum(r, "LEFT_HIP_raw_y")
+        ankle = fnum(r, "LEFT_ANKLE_raw_y")
+        if hip is not None and ankle is not None and ankle > hip:
+            scale_vals.append(ankle - hip)
+    scale = st.median(scale_vals) if scale_vals else None
+    if scale:
+        print(f"\n  身體比例尺（髖-踝）= {scale:.1f}px")
+
+    for side in ("LEFT", "RIGHT"):
+        vals = [v for v in (heel_above_toe(r, side) for r in good) if v is not None]
+        if len(vals) < 10:
+            continue
+        lo = sorted(vals)[len(vals) // 20]
+        hi = sorted(vals)[-max(1, len(vals) // 20)]
+        span = hi - lo
+        print(f"  {side:5} 腳跟高於腳尖：5% {lo:7.1f}px　95% {hi:7.1f}px　"
+              f"活動範圍 {span:6.1f}px", end="")
+        if scale:
+            print(f"（= {span/scale:.3f} 個腿長）")
+        else:
+            print()
+        # 雜訊底：取變化最小的連續 30 幀當作「靜止段」
+        window = 30
+        if len(vals) > window:
+            noise = min(
+                st.pstdev(vals[i:i + window])
+                for i in range(0, len(vals) - window, 5)
+            )
+            ratio = span / noise if noise > 0 else float("inf")
+            mark = "✅" if ratio >= 10 else ("⚠️ " if ratio >= 4 else "❌")
+            print(f"        最靜止 30 幀的標準差（雜訊底）= {noise:.2f}px　"
+                  f"訊噪比 {ratio:.1f} {mark}")
+    print("\n  訊噪比 ≥10 代表訊號清楚可用；4~10 勉強；<4 代表位移淹在雜訊裡，")
+    print("  那就不該用這個量當訊號，也不該憑推算訂門檻。")
 
 
 def main():

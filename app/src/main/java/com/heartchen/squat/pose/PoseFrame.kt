@@ -30,6 +30,21 @@ enum class KeyPointType(val label: String) {
     RIGHT_KNEE("R_KNEE"),
     LEFT_ANKLE("L_ANKLE"),
     RIGHT_ANKLE("R_ANKLE"),
+
+    // 腳跟與腳尖：為踮腳尖（`HEEL_RAISE`）而加，**刻意放在最後** ——
+    // `FrameLogger` 用 `entries` 產生欄位，加在中間會讓既有逐幀 CSV 的欄位位置全部位移。
+    //
+    // 踮腳尖最自然的訊號是「腳跟相對腳尖的垂直落差」：那是局部量測，
+    // 不受身體晃動污染；用髖或踝的上升量則會被晃動蓋掉（整個人只升高 5~8 公分）。
+    // ML Kit 本來就計算全部 33 點，多取這四點**不增加推論成本**。
+    //
+    // ⚠️ 這四點**目前沒有任何動作宣告需要**，所以不影響品質檢查 ——
+    // 加進來只是為了讓研究模式錄得到，先看清楚它們在兩公尺外的信心值與位移量級，
+    // 再決定踮腳尖的訊號與判準。不要在沒有這份資料前訂門檻。
+    LEFT_HEEL("L_HEEL"),
+    RIGHT_HEEL("R_HEEL"),
+    LEFT_TOE("L_TOE"),
+    RIGHT_TOE("R_TOE"),
     ;
 
     companion object {

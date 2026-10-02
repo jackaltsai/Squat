@@ -39,6 +39,11 @@ class PoseAnalyzer(
         PoseLandmark.RIGHT_KNEE to KeyPointType.RIGHT_KNEE,
         PoseLandmark.LEFT_ANKLE to KeyPointType.LEFT_ANKLE,
         PoseLandmark.RIGHT_ANKLE to KeyPointType.RIGHT_ANKLE,
+        // 腳跟與腳尖供踮腳尖使用（ML Kit 本來就算全部 33 點，多取不增加推論成本）
+        PoseLandmark.LEFT_HEEL to KeyPointType.LEFT_HEEL,
+        PoseLandmark.RIGHT_HEEL to KeyPointType.RIGHT_HEEL,
+        PoseLandmark.LEFT_FOOT_INDEX to KeyPointType.LEFT_TOE,
+        PoseLandmark.RIGHT_FOOT_INDEX to KeyPointType.RIGHT_TOE,
     )
 
     @ExperimentalGetImage

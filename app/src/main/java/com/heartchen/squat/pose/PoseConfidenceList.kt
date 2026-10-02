@@ -23,6 +23,10 @@ private val lowerBodyOrder = listOf(
     KeyPointType.RIGHT_KNEE,
     KeyPointType.LEFT_ANKLE,
     KeyPointType.RIGHT_ANKLE,
+    KeyPointType.LEFT_HEEL,
+    KeyPointType.RIGHT_HEEL,
+    KeyPointType.LEFT_TOE,
+    KeyPointType.RIGHT_TOE,
 )
 
 /** 上肢六點的固定顯示順序。 */
@@ -49,7 +53,10 @@ fun PoseConfidenceList(
     modifier: Modifier = Modifier
 ) {
     // 依固定順序顯示，而不是用 Set 的迭代順序 —— 每幀順序跳動的清單沒辦法用眼睛讀。
-    val displayOrder = (lowerBodyOrder + upperBodyOrder).filter { it in required }
+    // 先按固定順序排，再把順序表沒收錄到的（例如之後新增的關鍵點）接在後面 ——
+    // 純粹 filter 的話，漏收錄的點會被靜默吞掉，除錯時看不到自己要的數字。
+    val ordered = lowerBodyOrder + upperBodyOrder
+    val displayOrder = ordered.filter { it in required } + required.filterNot { it in ordered }
     val pointsByType = poseFrame?.keyPoints?.associateBy { it.type } ?: emptyMap()
 
     Column(
