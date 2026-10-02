@@ -1,5 +1,6 @@
 package com.heartchen.squat.squat
 
+import com.heartchen.squat.config.Config
 import com.heartchen.squat.pose.KeyPoint
 import com.heartchen.squat.pose.KeyPointType
 import org.junit.Assert.assertEquals
@@ -112,9 +113,10 @@ class RepSignalTest {
      */
     @Test
     fun `膝內夾判定只開給雙腳站地的下肢動作`() {
-        val shouldJudge = setOf(
-            ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT, ExerciseType.HEEL_RAISE
-        )
+        // 踮腳尖原本在這張名單上（當時宣告 LOWER_BODY）。改為只宣告髖與腳尖之後
+        // 自然被擋掉，而那是對的：雙腳踩地、膝不彎曲，膝內夾在這個動作上不會發生，
+        // 記一個算得出來卻無意義的數字只會污染 M5 的驗證集。
+        val shouldJudge = setOf(ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT)
         ExerciseType.entries.forEach { exercise ->
             assertEquals(
                 "${exercise.name} 的膝內夾判定開關不對",
@@ -653,5 +655,184 @@ class RepSignalTest {
         listOf(0.85f, 0.7f, 0.55f, 0.3f, 0.1f).forEach { m.update(upperBody(wristAt(it))) }
         repeat(8) { m.update(upperBody(wristAt(0f))) }
         assertEquals(1, m.repCount)
+    }
+
+    // ---- 踮腳尖 ----
+    //
+    // 身體尺寸取實測量級：腿長（髖-踝）256px、站姿「腳尖-髖」300px
+    // （實測 1.155~1.180 個腿長，這裡是 1.17）。
+    // 判準 0.06 個腿長 = 15.36px 的髖上升。
+    private val hrLeg = 256f
+    private val hrToeToHip = 300f
+    private val hrHipY = 400f
+    private val hrAnkleY = hrHipY + hrLeg          // 656
+    private val hrToeY = hrHipY + hrToeToHip       // 700
+
+    /** 髖上升到「判準的 [fraction] 倍」。1.0 = 剛好達標。 */
+    private fun heelRaiseFrame(fraction: Float): Map<KeyPointType, KeyPoint> {
+        val hipY = hrHipY - fraction * Config.HEEL_RAISE_TARGET_RISE_RATIO * hrLeg
+        return mapOf(
+            KeyPointType.LEFT_HIP to KeyPoint(KeyPointType.LEFT_HIP, 320f, hipY, 0.9f),
+            KeyPointType.RIGHT_HIP to KeyPoint(KeyPointType.RIGHT_HIP, 400f, hipY, 0.9f),
+            // 腳尖是錨點：踮起時它踩在地上不動。
+            KeyPointType.LEFT_TOE to KeyPoint(KeyPointType.LEFT_TOE, 320f, hrToeY, 0.9f),
+            KeyPointType.RIGHT_TOE to KeyPoint(KeyPointType.RIGHT_TOE, 400f, hrToeY, 0.9f),
+        )
+    }
+
+    private fun heelRaiseSignal(): RepSignal {
+        val c = HeelRaiseStandCalibrator()
+        repeat(5) {
+            c.accumulate(
+                heelRaiseFrame(0f) + mapOf(
+                    KeyPointType.LEFT_ANKLE to KeyPoint(KeyPointType.LEFT_ANKLE, 320f, hrAnkleY, 0.9f),
+                    KeyPointType.RIGHT_ANKLE to KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, hrAnkleY, 0.9f),
+                )
+            )
+        }
+        return c.build().single()
+    }
+
+    /** 回到靜止並停住足夠久（`STAND_STABLE_FRAMES` = 5，加上轉折那幾幀的餘裕）。 */
+    private fun SquatStateMachine.settle() = repeat(8) { update(heelRaiseFrame(0f)) }
+
+    @Test
+    fun `踮腳尖的判準是髖上升到腿長的固定比例`() {
+        val signal = heelRaiseSignal()
+        assertEquals(Config.HEEL_RAISE_TARGET_RISE_RATIO, signal.target!!, 1e-6f)
+        // 站姿時進度為 0
+        assertEquals(0f, signal.progress(heelRaiseFrame(0f))!!, 1e-5f)
+        // 踮到判準時進度剛好等於判準
+        assertEquals(signal.target!!, signal.progress(heelRaiseFrame(1f))!!, 1e-5f)
+    }
+
+    @Test
+    fun `踮一下完整的會計次且達成率為一`() {
+        val signal = heelRaiseSignal()
+        val m = SquatStateMachine(signal)
+        listOf(0f, 0.25f, 0.5f, 0.75f, 1.0f).forEach { m.update(heelRaiseFrame(it)) }
+        listOf(0.9f, 0.75f, 0.6f, 0.4f).forEach { m.update(heelRaiseFrame(it)) }
+        m.settle()
+        assertEquals(1, m.repCount)
+        assertEquals(1.0f, m.lastPeakProgress!! / signal.target!!, 1e-4f)
+    }
+
+    @Test
+    fun `只踮到判準的四分之一不計次`() {
+        val m = SquatStateMachine(heelRaiseSignal())
+        listOf(0f, 0.1f, 0.2f, 0.25f, 0.2f, 0.15f, 0.1f, 0.05f)
+            .forEach { m.update(heelRaiseFrame(it)) }
+        m.settle()
+        assertEquals(0, m.repCount)
+        assertEquals(SquatState.STAND, m.state)
+    }
+
+    @Test
+    fun `踮到判準一半會計次但達成率只有一半`() {
+        val signal = heelRaiseSignal()
+        val m = SquatStateMachine(signal)
+        listOf(0f, 0.2f, 0.35f, 0.5f, 0.45f, 0.4f, 0.3f, 0.2f)
+            .forEach { m.update(heelRaiseFrame(it)) }
+        m.settle()
+        assertEquals("有動作就該計次，幅度由 p 表達", 1, m.repCount)
+        assertEquals(0.5f, m.lastPeakProgress!! / signal.target!!, 1e-4f)
+    }
+
+    /**
+     * 踮腳尖的位移只有腿長的 6~8%，所以「雜訊會不會自己湊出一下」是這個動作
+     * 最實際的風險。這裡用的 ±0.18 個判準是**實測最差的雜訊底**
+     * （兩份逐幀資料量到 0.003~0.011 個腿長，而判準是 0.06）。
+     *
+     * 餘裕只有 1.67 倍，是六個動作裡最窄的 —— 這條測試就是為了讓它別再變窄。
+     */
+    @Test
+    fun `站著不動時實測最差的雜訊底不會湊出一下`() {
+        val m = SquatStateMachine(heelRaiseSignal())
+        val rng = java.util.Random(7)
+        repeat(600) { m.update(heelRaiseFrame((rng.nextFloat() - 0.5f) * 0.36f)) }
+        assertEquals(0, m.repCount)
+        assertEquals(SquatState.STAND, m.state)
+    }
+
+    @Test
+    fun `踮在最高點停頓不會誤觸發轉折`() {
+        val m = SquatStateMachine(heelRaiseSignal())
+        listOf(0f, 0.3f, 0.6f, 1.0f).forEach { m.update(heelRaiseFrame(it)) }
+        repeat(10) {
+            assertEquals(
+                "撐在最高點時不應離開 DOWN",
+                SquatState.DOWN,
+                m.update(heelRaiseFrame(1.0f))
+            )
+        }
+        listOf(0.9f, 0.75f, 0.6f, 0.4f).forEach { m.update(heelRaiseFrame(it)) }
+        m.settle()
+        assertEquals(1, m.repCount)
+    }
+
+    @Test
+    fun `踮過判準一倍半的達成率大於一`() {
+        val signal = heelRaiseSignal()
+        val m = SquatStateMachine(signal)
+        listOf(0f, 0.4f, 0.8f, 1.2f, 1.5f, 1.3f, 1.1f, 0.9f, 0.5f)
+            .forEach { m.update(heelRaiseFrame(it)) }
+        m.settle()
+        assertEquals(1, m.repCount)
+        assertEquals(1.5f, m.lastPeakProgress!! / signal.target!!, 1e-4f)
+    }
+
+    @Test
+    fun `連續踮三下計到三下`() {
+        val m = SquatStateMachine(heelRaiseSignal())
+        repeat(3) {
+            listOf(0f, 0.3f, 0.6f, 1.0f, 0.9f, 0.75f, 0.6f, 0.4f)
+                .forEach { f -> m.update(heelRaiseFrame(f)) }
+            m.settle()
+        }
+        assertEquals(3, m.repCount)
+    }
+
+    /**
+     * 校正時人就已經踮著 → 「腳尖-髖 ÷ 腿長」會跑掉，必須拒絕並要求重做。
+     * 不拒絕的話基準偏高，整場的進度會是負的、一下都計不到。
+     */
+    @Test
+    fun `校正時腳尖與髖的比例不合理則拒絕產生訊號`() {
+        val c = HeelRaiseStandCalibrator()
+        repeat(5) {
+            c.accumulate(
+                mapOf(
+                    KeyPointType.LEFT_HIP to KeyPoint(KeyPointType.LEFT_HIP, 320f, 400f, 0.9f),
+                    KeyPointType.RIGHT_HIP to KeyPoint(KeyPointType.RIGHT_HIP, 400f, 400f, 0.9f),
+                    KeyPointType.LEFT_ANKLE to KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 656f, 0.9f),
+                    KeyPointType.RIGHT_ANKLE to KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 656f, 0.9f),
+                    // 腳尖只比髖低 100px = 0.39 個腿長，遠在合理區間（1.05~1.45）之外
+                    KeyPointType.LEFT_TOE to KeyPoint(KeyPointType.LEFT_TOE, 320f, 500f, 0.9f),
+                    KeyPointType.RIGHT_TOE to KeyPoint(KeyPointType.RIGHT_TOE, 400f, 500f, 0.9f),
+                )
+            )
+        }
+        assertTrue("不合理的站姿量測應拒絕", c.build(strict = true).isEmpty())
+        assertTrue("放寬後仍應產生訊號（避免卡在校正出不去）",
+            c.build(strict = false).isNotEmpty())
+    }
+
+    /**
+     * 「要不要在倒數期間重新取基準」綁在**判準有多小**上，不綁在動作名稱上。
+     *
+     * 實測一場使用者在站姿校正後退了 6%（腿長 291.9 → 274.2px），
+     * 基準誤差達腿長 11%，而踮腳尖的振幅只有 6~8% —— 用站姿校正的基準是 0 下。
+     * 判準大的動作無傷，所以不該連它們一起改（它們都已實機驗證過）。
+     */
+    @Test
+    fun `只有判準夠小的動作需要在倒數期間重新取基準`() {
+        assertTrue("踮腳尖必須重取", needsCountdownRebaseline(listOf(heelRaiseSignal())))
+        assertTrue("雙臂高舉不該重取", !needsCountdownRebaseline(listOf(armRaiseSignal())))
+        // 深蹲家族的 target 是 null（分母是 Duser），一律不重取
+        assertTrue(
+            "深蹲家族不該重取",
+            !needsCountdownRebaseline(listOf(SquatSignal(600f, 400f)))
+        )
+        assertTrue("沒有訊號時不該重取", !needsCountdownRebaseline(emptyList()))
     }
 }

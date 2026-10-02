@@ -39,7 +39,10 @@ class FramingGuidanceTest {
         )
     }
 
-    private fun lowerBody(hipY: Float = 600f, ankleY: Float = 1100f): PoseFrame = frame(
+    // 預設腿長 550px = 畫面高的 43%。這個值不是隨便取的：踮腳尖另有一個更嚴的
+    // 距離下限（0.40），而**實機驗證通過的那場正是 0.433** ——
+    // 原本的 1100f（0.39）會讓踮腳尖被判太遠，六動作分流測試就會紅。
+    private fun lowerBody(hipY: Float = 600f, ankleY: Float = 1150f): PoseFrame = frame(
         kp(KeyPointType.LEFT_HIP, 320f, hipY),
         kp(KeyPointType.RIGHT_HIP, 400f, hipY),
         kp(KeyPointType.LEFT_ANKLE, 320f, ankleY),
@@ -238,6 +241,28 @@ class FramingGuidanceTest {
                 )
             }
         }
+    }
+
+    /**
+     * 踮腳尖的位移只有腿長的 6~8%，**訊噪比對拍攝距離極度敏感** ——
+     * 實測腿長 226px 時只有 7.1、277px 時是 25.0。
+     * 一般下肢動作的 0.20 門檻完全擋不住前者（226/640 = 0.35 照樣通過），
+     * 所以踮腳尖另有一個 0.40 的下限。
+     *
+     * 這條測試鎖住「同一個距離，深蹲可以、踮腳尖不行」。
+     */
+    @Test
+    fun `踮腳尖的距離下限比其他下肢動作嚴`() {
+        // 腿長 500px = 畫面高的 39%：深蹲沒問題
+        val borderline = lowerBody(hipY = 600f, ankleY = 1100f)
+        assertEquals(FramingIssue.OK, evaluateFraming(borderline, ExerciseType.SQUAT))
+        assertEquals(
+            "踮腳尖在這個距離應請使用者往前站",
+            FramingIssue.TOO_FAR,
+            evaluateFraming(borderline, ExerciseType.HEEL_RAISE)
+        )
+        // 腿長 550px = 43%（實機驗證通過的那場）：兩者都該良好
+        assertEquals(FramingIssue.OK, evaluateFraming(lowerBody(), ExerciseType.HEEL_RAISE))
     }
 
     @Test

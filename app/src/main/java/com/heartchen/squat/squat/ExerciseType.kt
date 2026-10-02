@@ -70,10 +70,14 @@ enum class ExerciseType(
 
     HEEL_RAISE(
         label = "踮腳尖",
-        requiredPoints = KeyPointType.LOWER_BODY,
-        guidance = "雙腳踮起再放下，訓練小腿與平衡。",
-        detectionImplemented = false,
-        feedback = FeedbackMessages("高度達標！", "腳跟再抬高", "腳跟抬太低"),
+        // 訊號是「髖相對腳尖的上升量」，所以只宣告髖與腳尖。
+        // 不宣告膝與踝的理由見 KeyPointType.HIP_AND_TOE 與 HeelRaiseSignal：
+        // 腳部關鍵點低估抬升 1.6~2.2 倍，判定不靠它們；
+        // 校正需要的踝由累加器自己挑（靜止時可靠）。
+        requiredPoints = KeyPointType.HIP_AND_TOE,
+        guidance = "雙腳踮起再放下，訓練小腿與平衡。站近一點，讓整雙腿清楚入鏡。",
+        detectionImplemented = true,
+        feedback = FeedbackMessages("高度達標！", "再踮高一點", "踮太低了"),
         iconRes = R.drawable.ic_exercise_heel_raise,
         safetyNote = "建議扶著穩固的桌椅進行。",
     ),

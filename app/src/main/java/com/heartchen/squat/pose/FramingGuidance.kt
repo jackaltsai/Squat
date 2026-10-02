@@ -66,13 +66,14 @@ fun evaluateFraming(
     return if (KeyPointType.LEFT_WRIST in exercise.requiredPoints) {
         evaluateUpperBodyFraming(byType, frame)
     } else {
-        evaluateLowerBodyFraming(byType, frame)
+        evaluateLowerBodyFraming(byType, frame, exercise)
     }
 }
 
 private fun evaluateLowerBodyFraming(
     byType: Map<KeyPointType, KeyPoint>,
-    frame: PoseFrame
+    frame: PoseFrame,
+    exercise: ExerciseType
 ): FramingIssue {
     val hipY = averageY(byType, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP)
         ?: return FramingIssue.NO_POSE
@@ -90,8 +91,17 @@ private fun evaluateLowerBodyFraming(
     }
 
     val legSpanRatio = (ankleY - hipY) / heightPx
+    // 踮腳尖的位移只有腿長的 6~8%，訊噪比對拍攝距離**極度敏感** ——
+    // 實測腿長 226px 時只有 7.1、277px 時是 25.0，而 0.20 的一般門檻
+    // 完全擋不住前者（226/640 = 0.35 照樣通過）。所以它要一個更嚴的下限。
+    // 其餘下肢動作的位移大一個數量級，不需要被這個門檻綁住。
+    val tooFarRatio = if (exercise == ExerciseType.HEEL_RAISE) {
+        Config.FRAMING_HEEL_RAISE_MIN_LEG_SPAN_RATIO
+    } else {
+        Config.FRAMING_TOO_FAR_RATIO
+    }
     return when {
-        legSpanRatio < Config.FRAMING_TOO_FAR_RATIO -> FramingIssue.TOO_FAR
+        legSpanRatio < tooFarRatio -> FramingIssue.TOO_FAR
         legSpanRatio > Config.FRAMING_TOO_CLOSE_RATIO -> FramingIssue.TOO_CLOSE
         else -> FramingIssue.OK
     }

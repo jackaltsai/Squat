@@ -45,8 +45,9 @@ EXPECTED_DUSER_COUNT = {"HIGH_KNEES": 2}
 # 哪些動作該量膝內夾。這張表**鏡像** app 的 `judgesKneeValgus()`，判據是
 # 「同時宣告需要兩膝與兩踝」：
 #
-#   SQUAT / CHAIR_SQUAT / HEEL_RAISE → LOWER_BODY           → 量
+#   SQUAT / CHAIR_SQUAT               → LOWER_BODY          → 量
 #   HIGH_KNEES                        → HIP_AND_KNEE        → 不量（一腳離地）
+#   HEEL_RAISE                        → HIP_AND_TOE         → 不量（膝不彎曲）
 #   ARM_RAISE / CHEST_EXPANSION       → SHOULDER_AND_WRIST  → 不量（不看下肢）
 #
 # Kotlin 那邊有 `RepSignalTest` 逐一鎖住六個動作，這張表只負責檢查**裝置實際
@@ -55,7 +56,10 @@ EXPECTED_DUSER_COUNT = {"HIGH_KNEES": 2}
 JUDGES_VALGUS = {
     "SQUAT": True,
     "CHAIR_SQUAT": True,
-    "HEEL_RAISE": True,
+    # 踮腳尖改為只宣告髖與腳尖（訊號是髖相對腳尖的上升量），所以不量膝內夾。
+    # 雙腳踩地、膝不彎曲，膝內夾在這個動作上不會發生 ——
+    # 記一個算得出來卻無意義的數字只會污染 M5 的驗證集。
+    "HEEL_RAISE": False,
     "HIGH_KNEES": False,
     "ARM_RAISE": False,
     "CHEST_EXPANSION": False,
@@ -327,12 +331,11 @@ def main():
         if "exerciseType" in d.columns and isinstance(d["exerciseType"].iloc[0], str)
         and str(d["localTime"].max()) >= VALGUS_GATE_SINCE
     }
-    todo = sorted(set(JUDGES_VALGUS) - covered - {"HEEL_RAISE"})
+    todo = sorted(set(JUDGES_VALGUS) - covered)
     if todo:
         print(f"\n⚠️  閘門上線（{VALGUS_GATE_SINCE}）之後還沒有這些動作的場次："
               f"{', '.join(todo)}")
-        print("   共用程式碼改過之後，每個動作都要有一場才算驗過。"
-              "（踮腳尖不做，已排除）")
+        print("   共用程式碼改過之後，每個動作都要有一場才算驗過。")
 
 
 if __name__ == "__main__":

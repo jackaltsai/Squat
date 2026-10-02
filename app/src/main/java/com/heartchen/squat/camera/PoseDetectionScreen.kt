@@ -70,6 +70,7 @@ import com.heartchen.squat.squat.detectKneeValgus
 import com.heartchen.squat.squat.evaluateDepthFeedback
 import com.heartchen.squat.squat.judgesKneeValgus
 import com.heartchen.squat.squat.kneeValgusRatio
+import com.heartchen.squat.squat.needsCountdownRebaseline
 import com.heartchen.squat.squat.standCalibratorFor
 import com.heartchen.squat.stats.DateBuckets
 import com.heartchen.squat.stats.STATS_CHART_DAYS
@@ -127,6 +128,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // 不能統一累加四組關鍵點 —— 品質檢查只保證當前動作需要的點到齊，
     // 手臂動作時髖與踝可能根本沒偵測到，一起累加會讓站姿校正永遠跑不完。
     var standCalibrator by remember { mutableStateOf<StandCalibrator?>(null) }
+    // 倒數期間重新量一次靜止基準，只有踮腳尖需要（見 HeelRaiseSignal 的說明）：
+    // 它的振幅只有腿長的 6~8%，而使用者在站姿校正與訓練之間移動幾個百分點是常態，
+    // 用站姿校正的基準跑狀態機會是 0 下。倒數是正式開始前站定的最後一刻。
+    var countdownCalibrator by remember { mutableStateOf<StandCalibrator?>(null) }
     var standCalibrationWarning by remember { mutableStateOf<String?>(null) }
     // 站姿校正被判定不合理（如手臂長/肩寬超出解剖學區間）時要求重做的次數。
     // 用完上限就照收 —— 與深蹲的基準校正同樣的取捨：卡在校正出不去更糟，
@@ -284,6 +289,23 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 250)
         delay(800)
         readyCountdownText = null
+        // 倒數期間量到的基準取代站姿校正的那一份。量不到（例如整段倒數腳尖都沒入鏡）
+        // 就沿用站姿校正的訊號 —— 退回一個已知較差的基準，比讓使用者卡在這裡好。
+        if (needsCountdownRebaseline(repSignals)) {
+            val rebuilt = countdownCalibrator?.build(strict = true).orEmpty()
+            if (rebuilt.isNotEmpty()) {
+                repSignals = rebuilt
+                trainingMachines = rebuilt.map { SquatStateMachine(it) }
+            } else {
+                Log.w(
+                    TAG,
+                    "Countdown rebaseline unavailable for $selectedExercise " +
+                        "(samples=${countdownCalibrator?.sampleCount ?: 0}), " +
+                        "falling back to stand-hold baseline"
+                )
+            }
+            countdownCalibrator = null
+        }
         flowStep = FlowStep.TRAINING
     }
 
@@ -416,19 +438,49 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             }
 
             val smoothedByType = emaSmoother.smooth(frame.keyPoints).associateBy { it.type }
+            // 給站姿／倒數累加器用的「只有可信點」版本。
+            //
+            // ⚠️ `smoothedByType` **沒有**信心值過濾 —— 品質檢查擋的是整幀，
+            // 判據只有 `requiredPoints`，其餘關鍵點 ML Kit 照樣回傳（偵測到人就全給，
+            // 不管看不看得到）。累加器會讀 `requiredPoints` 以外的點：
+            // 高抬腿與踮腳尖都要用踝算腿長比例尺，卻刻意不宣告踝
+            // （抬起那腳的踝會掉信心值，宣告了會讓整幀被丟掉）。
+            //
+            // 那些點若信心值很低，`points[type] ?: return false` 攔不住它 ——
+            // ML Kit 不會把點省略掉，所以「累加器自己會跳過缺點的幀」這個說法
+            // 對低信心的點根本不成立，會把亂猜的座標平均進基準。
+            // 這與 `evaluateFraming` 當初沒過濾信心值是同一個錯（那次害整場
+            // 一直念「舉到肩膀就好」）。過濾後 `progress()` 拿不到點會回 null、該幀跳過，
+            // 對五個已驗證的動作沒有行為改變（它們讀的點都在 `requiredPoints` 裡、
+            // 必定已達門檻）。
+            val confidentByType = smoothedByType.filterValues {
+                it.inFrameLikelihood >= Config.CONFIDENCE_THRESHOLD
+            }
             var stateForLog = flowStep.name
 
             when (flowStep) {
                 // 倒數期間與結束後都不餵狀態機：倒數時使用者可能還在從校正的最後一下站起來，
                 // 結束後畫面停在摘要，兩者都不該再計次。
-                FlowStep.SELECT_EXERCISE, FlowStep.READY_COUNTDOWN, FlowStep.FINISHED -> Unit
+                FlowStep.SELECT_EXERCISE, FlowStep.FINISHED -> Unit
+
+                FlowStep.READY_COUNTDOWN -> {
+                    // 一樣不餵狀態機，但需要重新取基準的動作在這裡累加量測。
+                    // 不是所有動作都做：其餘五個已實機驗證，不動它們的基準來源。
+                    if (needsCountdownRebaseline(repSignals)) {
+                        val calibrator = countdownCalibrator
+                            ?: standCalibratorFor(selectedExercise)
+                                ?.also { countdownCalibrator = it }
+                            ?: return@PoseAnalyzer
+                        calibrator.accumulate(confidentByType)
+                    }
+                }
 
                 FlowStep.STAND_HOLD -> {
                     // 尚未實作偵測的動作沒有累加器（UI 已標灰不可點，這裡只是防線）。
                     val calibrator = standCalibrator
                         ?: standCalibratorFor(selectedExercise)?.also { standCalibrator = it }
                         ?: return@PoseAnalyzer
-                    if (calibrator.accumulate(smoothedByType)) {
+                    if (calibrator.accumulate(confidentByType)) {
                         val startMs = standHoldStartMs ?: System.currentTimeMillis().also { standHoldStartMs = it }
                         standHoldElapsedMs = System.currentTimeMillis() - startMs
                         if (standHoldElapsedMs >= Config.STAND_HOLD_DURATION_MS) {
@@ -849,6 +901,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     calibrationRetryCount = 0
                     calibrationWarning = null
                     standCalibrator = null
+                    countdownCalibrator = null
                     repSignals = emptyList()
                     standCalibrationWarning = null
                     standCalibrationRetryCount = 0

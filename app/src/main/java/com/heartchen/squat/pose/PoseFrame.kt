@@ -60,7 +60,23 @@ enum class KeyPointType(val label: String) {
             LEFT_HIP, RIGHT_HIP, LEFT_KNEE, RIGHT_KNEE
         )
 
-        /** 深蹲家族（深蹲、坐站、踮腳尖）需要的下肢六點。 */
+        /**
+         * 踮腳尖只需要髖與腳尖。
+         *
+         * 訊號是「髖相對腳尖的上升量」，腳尖是錨點、髖是量測點。
+         * 站姿校正另外需要踝（算腿長比例尺），但校正在靜止時進行、踝可靠，
+         * 累加器自己會跳過缺點的幀 —— 與 [HIP_AND_KNEE] 同樣的取捨：
+         * **只宣告訓練中真正會讀的點**，多宣告只是在製造失敗模式。
+         *
+         * ⚠️ 不含膝與踝，所以 `judgesKneeValgus(HEEL_RAISE)` 會是 false。
+         * 這是刻意的：踮腳尖雙腳踩地、膝不彎曲，膝內夾在這個動作上不會發生，
+         * 記一個算得出來但無意義的數字只會污染 M5 的驗證集。
+         */
+        val HIP_AND_TOE: Set<KeyPointType> = setOf(
+            LEFT_HIP, RIGHT_HIP, LEFT_TOE, RIGHT_TOE
+        )
+
+        /** 深蹲家族（深蹲、坐站）需要的下肢六點。 */
         val LOWER_BODY: Set<KeyPointType> = setOf(
             LEFT_HIP, RIGHT_HIP, LEFT_KNEE, RIGHT_KNEE, LEFT_ANKLE, RIGHT_ANKLE
         )

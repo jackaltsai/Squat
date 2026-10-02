@@ -399,6 +399,110 @@ class HighKneesStandCalibrator : StandCalibrator {
 }
 
 /**
+ * 踮腳尖：進度 = 「髖相對腳尖的上升量」÷ 站姿腿長。
+ *
+ * ### 為什麼量髖，不量腳跟
+ * 直覺上「腳跟相對腳尖的垂直落差」才是踮腳尖本身，而且是局部量測、不受身體晃動污染。
+ * 兩份逐幀資料否決了這個直覺：**ML Kit 的腳部關鍵點低估垂直抬升 1.6~2.2 倍**。
+ * 小腿是剛體，腳掌踩地以腳尖為軸抬起時，**膝的上升量必須等於踝的上升量**，
+ * 實測膝卻是踝的兩倍以上 —— 解剖學上不可能，所以是關鍵點被模型先驗壓住，
+ * 不是使用者踮得不夠高（髖的 0.094 個腿長 ≈ 8cm，是完整的提踵）。
+ *
+ * 腳跟訊號的振幅/雜訊只有 6~8；以髖為量測點是 25。
+ * 腳尖仍然是**錨點**（它踩在地上不動），所以身體的平移會被抵銷。
+ *
+ * ### 為什麼基準來自倒數期間，不是站姿校正期間
+ * 這是整個動作成立與否的關鍵。踮腳尖的振幅只有腿長的 6~8%，而使用者在
+ * 站姿校正與訓練之間移動幾個百分點是常態 —— 實測一場退了 6%
+ * （腿長 291.9 → 274.2px），用站姿校正的基準跑狀態機是 **0 下**，整場進度全為負。
+ *
+ * | 基準取樣時機 | 基準誤差／振幅（兩場） |
+ * |---|---|
+ * | 站姿校正 STAND_HOLD | 0.83 / **6.29** |
+ * | 倒數 READY_COUNTDOWN | **0.19 / 0.35** |
+ *
+ * 倒數是使用者**正式開始前站定的最後一刻**，位置與訓練時一致。
+ * 其餘五個動作的振幅大一個數量級（高抬腿是腿長的 50%），同樣的誤差無傷，
+ * 所以它們維持用站姿校正的基準 —— 不動已經實機驗證過的東西。
+ */
+class HeelRaiseSignal(
+    /** 倒數期間量到的「腳尖 Y − 髖 Y」平均值。 */
+    private val baselineToeToHip: Float,
+    /** 倒數期間量到的「踝 Y − 髖 Y」平均值（腿長）。 */
+    private val normalizeScale: Float,
+) : RepSignal {
+    override fun progress(points: Map<KeyPointType, KeyPoint>): Float? {
+        if (normalizeScale <= 0f) return null
+        val toeY = averageY(points, KeyPointType.LEFT_TOE, KeyPointType.RIGHT_TOE) ?: return null
+        val hipY = averageY(points, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP) ?: return null
+        // 影像座標 Y 向下為正：踮起時髖上升（hipY 變小），(toeY - hipY) 變大，進度變正。
+        return ((toeY - hipY) - baselineToeToHip) / normalizeScale
+    }
+
+    override val target: Float = Config.HEEL_RAISE_TARGET_RISE_RATIO
+    override val enterThreshold: Float = target * Config.HEEL_RAISE_ENTER_FRACTION
+    override val turnConfirmRise: Float = target * Config.HEEL_RAISE_TURN_CONFIRM_FRACTION
+    override val returnThreshold: Float = target * Config.HEEL_RAISE_RETURN_FRACTION
+}
+
+/**
+ * 踮腳尖的站姿／倒數量測累加器。
+ *
+ * 同一個類別被用在兩個階段：站姿校正（做合理性檢查、讓使用者看 guidance）
+ * 與倒數期間（真正拿來當基準的那一次量測）。
+ * [HEEL_RAISE] 之所以需要第二次，見 [HeelRaiseSignal] 的說明。
+ */
+class HeelRaiseStandCalibrator : StandCalibrator {
+    private var toeToHipSum = 0f
+    private var legSum = 0f
+    override var sampleCount = 0
+        private set
+
+    override fun accumulate(points: Map<KeyPointType, KeyPoint>): Boolean {
+        val hipY = averageY(points, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP) ?: return false
+        val toeY = averageY(points, KeyPointType.LEFT_TOE, KeyPointType.RIGHT_TOE) ?: return false
+        val ankleY = averageY(points, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
+            ?: return false
+        toeToHipSum += toeY - hipY
+        legSum += ankleY - hipY
+        sampleCount += 1
+        return true
+    }
+
+    override fun build(strict: Boolean): List<RepSignal> {
+        if (sampleCount == 0) return emptyList()
+        val toeToHip = toeToHipSum / sampleCount
+        val leg = legSum / sampleCount
+        // 腳尖必須低於髖、踝必須低於髖，否則整個比值沒有意義。
+        if (leg <= 0f || toeToHip <= 0f) return emptyList()
+        // 腳尖理應比踝更低（透視使然），所以比值必定 > 1。校正時人就已經踮著、
+        // 或關鍵點整組亂掉時這個比值會跑掉。
+        if (strict && !isPlausibleToeToHip(toeToHip / leg)) return emptyList()
+        return listOf(HeelRaiseSignal(toeToHip, leg))
+    }
+}
+
+/**
+ * 這組訊號需不需要在倒數期間重新量基準？
+ *
+ * 判據是**判準有多小**，不是動作是哪一個 —— 見
+ * [Config.COUNTDOWN_REBASELINE_TARGET_MAX]。把分流綁在成因上而不是名稱上，
+ * 是因為「依動作名稱分流」在這個專案裡已經壞過三次（框位引導換過三種判據）。
+ *
+ * 深蹲家族的 `target` 是 null（分母是 Duser），回傳 false：
+ * 它們的基準誤差同樣存在，但振幅大一個數量級，而且已經實機驗證過 ——
+ * 不動已驗證的東西。
+ */
+fun needsCountdownRebaseline(signals: List<RepSignal>): Boolean {
+    val target = signals.firstOrNull()?.target ?: return false
+    return target <= Config.COUNTDOWN_REBASELINE_TARGET_MAX
+}
+
+/** 站姿量到的「腳尖-髖 ÷ 腿長」是否合理。區間見 [Config.CALIBRATION_MIN_TOE_TO_HIP_RATIO]。 */
+internal fun isPlausibleToeToHip(ratio: Float): Boolean =
+    ratio in Config.CALIBRATION_MIN_TOE_TO_HIP_RATIO..Config.CALIBRATION_MAX_TOE_TO_HIP_RATIO
+
+/**
  * 站姿量到的「手臂長 ÷ 肩寬」是否落在解剖學合理區間。
  *
  * 兩個上肢動作的判準都建立在手臂長上。手沒有完全自然下垂時手臂長被低估，
@@ -422,8 +526,8 @@ fun standCalibratorFor(exercise: ExerciseType): StandCalibrator? = when (exercis
     ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT -> LowerBodyStandCalibrator()
     ExerciseType.ARM_RAISE -> ArmRaiseStandCalibrator()
     ExerciseType.CHEST_EXPANSION -> ChestExpansionStandCalibrator()
+    ExerciseType.HEEL_RAISE -> HeelRaiseStandCalibrator()
     ExerciseType.HIGH_KNEES -> HighKneesStandCalibrator()
-    ExerciseType.HEEL_RAISE -> null
 }
 
 internal fun averageY(
