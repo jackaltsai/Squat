@@ -42,6 +42,56 @@ CHEST_TARGET_FRACTION_OF_FULL = 0.6
 # 所以兩個值是正常的；其餘動作一場只校正一次，只該有一個。
 EXPECTED_DUSER_COUNT = {"HIGH_KNEES": 2}
 
+# 哪些動作該量膝內夾。這張表**鏡像** app 的 `judgesKneeValgus()`，判據是
+# 「同時宣告需要兩膝與兩踝」：
+#
+#   SQUAT / CHAIR_SQUAT / HEEL_RAISE → LOWER_BODY           → 量
+#   HIGH_KNEES                        → HIP_AND_KNEE        → 不量（一腳離地）
+#   ARM_RAISE / CHEST_EXPANSION       → SHOULDER_AND_WRIST  → 不量（不看下肢）
+#
+# Kotlin 那邊有 `RepSignalTest` 逐一鎖住六個動作，這張表只負責檢查**裝置實際
+# 輸出**有沒有照辦。兩邊不一致就該在這裡被報出來 —— 這正是 2026-10-02
+# 才發現的那種污染（高抬腿記了 −0.26~−0.55 的垃圾比值，看起來像「量到了」）。
+JUDGES_VALGUS = {
+    "SQUAT": True,
+    "CHAIR_SQUAT": True,
+    "HEEL_RAISE": True,
+    "HIGH_KNEES": False,
+    "ARM_RAISE": False,
+    "CHEST_EXPANSION": False,
+}
+
+# 膝內夾閘門上線的時間（2026-10-02 20:39 實機確認）。在這之前的紀錄即使
+# 帶著不該有的 ratio 也**不是 bug**，是舊資料 —— 不該讓迴歸檢查對它們亮紅燈，
+# 否則每次跑都一片紅，真正的迴歸就被淹掉了。
+VALGUS_GATE_SINCE = "2026-10-02 20:39"
+
+
+def check_valgus_gate(d, exercise):
+    """回傳 (通過?, 說明)。None 代表這份 CSV 太舊、無從檢查。"""
+    if "kneeValgusRatio" not in d.columns:
+        return None, "舊格式沒有 kneeValgusRatio 欄位"
+    # `duser` 與 `kneeValgusRatio` 是同一批加進 Room 的原始值欄位，更早的紀錄整欄是
+    # null。那種場次「沒有 ratio」是**欄位還不存在**，不是閘門擋過頭 ——
+    # 用資料自己判斷，而不是再寫一個硬編日期（匯出的全部歷史裡有 15 場是這種）。
+    if "duser" in d.columns and d["duser"].isna().all() \
+            and d["kneeValgusRatio"].isna().all():
+        return None, "舊格式（duser 與 ratio 原始值欄位當時還不存在）"
+    expected = JUDGES_VALGUS.get(exercise)
+    if expected is None:
+        return None, f"未知動作 {exercise}"
+    has_ratio = bool(d["kneeValgusRatio"].notna().any())
+    if has_ratio == expected:
+        return True, "量" if expected else "不量（寫 null）"
+    if not expected and has_ratio:
+        latest = str(d["localTime"].max())
+        if latest < VALGUS_GATE_SINCE:
+            return None, f"這一場在閘門上線（{VALGUS_GATE_SINCE}）之前，舊資料"
+        return False, (f"{exercise} 不該量膝內夾，但這一場有 ratio —— "
+                       f"judgesKneeValgus() 的閘門沒生效，M5 的驗證集會被污染")
+    return False, (f"{exercise} 應該要量膝內夾，但這一場的 ratio 全是空的 —— "
+                   f"閘門擋過頭了，深蹲家族少了唯一的姿勢判定")
+
 
 def arm_to_shoulder_ratio(exercise, duser):
     """從 duser 反推「手臂長 ÷ 肩寬」。無法反推時回傳 None。"""
@@ -155,6 +205,9 @@ def main():
     for _, per_file in df.groupby("sourceFile", sort=True):
         sessions += split_sessions(per_file)
 
+    # 迴歸檢查的失敗清單。逐場印一行容易被滾動吞掉，所以最後再集中報一次。
+    regressions = []
+
     for name, d in sessions:
         mode = d["mode"].iloc[0]
         p = d["depthRatio"]
@@ -166,20 +219,31 @@ def main():
 
         mismatch = (p.apply(lambda v: expected_color(v, mode)) != d["feedbackColor"]).sum()
         print(f"  分級邏輯: {'✅ 全部相符' if mismatch == 0 else f'❌ {mismatch} 筆不符'}")
+        if mismatch:
+            regressions.append((name, "—", f"分級邏輯 {mismatch} 筆與論文表 1 不符"))
+
+        raw_ex = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else None
+        exercise = raw_ex if isinstance(raw_ex, str) else "SQUAT"
 
         valgus = d["kneeValgus"].sum()
         print(f"  膝內夾: {int(valgus)}/{len(d)}", end="")
-        if has_raw and d["kneeValgusRatio"].notna().any():
-            r = d["kneeValgusRatio"]
+        if "kneeValgusRatio" in d.columns and d["kneeValgusRatio"].notna().any():
+            r = d["kneeValgusRatio"].dropna()
             print(f"   ratio 範圍={r.min():.3f}~{r.max():.3f} 平均={r.mean():.3f}")
         else:
             print()
+        passed, why = check_valgus_gate(d, exercise)
+        if passed is True:
+            print(f"  膝內夾閘門: ✅ {exercise} → {why}")
+        elif passed is False:
+            print(f"  膝內夾閘門: ❌ {why}")
+            regressions.append((name, exercise, why))
+        else:
+            print(f"  膝內夾閘門: —— {why}")
 
         if has_raw and d["duser"].notna().any():
             du = d["duser"].dropna().unique()
             print(f"  Duser = {', '.join(f'{v:.4f}' for v in du)}")
-            raw = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else None
-            exercise = raw if isinstance(raw, str) else "SQUAT"
             expected = EXPECTED_DUSER_COUNT.get(exercise, 1)
             if exercise == "HIGH_KNEES" and len(du) == 2:
                 print("     （兩個 Duser 是左右腳各自的判準，不是兩場被合併）")
@@ -244,6 +308,31 @@ def main():
             row["Duser"] = round(d["duser"].dropna().iloc[0], 4)
         rows.append(row)
     print(pd.DataFrame(rows).to_string(index=False))
+
+    print("\n\n=== 迴歸檢查 ===")
+    if regressions:
+        print(f"❌ {len(regressions)} 項不通過：")
+        for name, exercise, why in regressions:
+            print(f"  {name}（{exercise}）：{why}")
+        print("\n這些是**資料完整性**問題，不是顯示問題 —— "
+              "帶著它們蒐集受試者資料，M5 的門檻掃描會被污染。")
+    else:
+        print("✅ 全部場次通過（分級邏輯、膝內夾閘門、Duser 數量）")
+        print("   註：這只檢查「App 寫出來的數字自我一致」，"
+              "不保證計次次數正確 —— 次數要靠人自己數。")
+
+    covered = {
+        d["exerciseType"].iloc[0]
+        for _, d in sessions
+        if "exerciseType" in d.columns and isinstance(d["exerciseType"].iloc[0], str)
+        and str(d["localTime"].max()) >= VALGUS_GATE_SINCE
+    }
+    todo = sorted(set(JUDGES_VALGUS) - covered - {"HEEL_RAISE"})
+    if todo:
+        print(f"\n⚠️  閘門上線（{VALGUS_GATE_SINCE}）之後還沒有這些動作的場次："
+              f"{', '.join(todo)}")
+        print("   共用程式碼改過之後，每個動作都要有一場才算驗過。"
+              "（踮腳尖不做，已排除）")
 
 
 if __name__ == "__main__":
