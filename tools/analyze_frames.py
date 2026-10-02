@@ -151,7 +151,12 @@ def report(path):
         print("  請用新版 App（2026-10-02 之後）重錄，才會記錄腳跟與腳尖。")
 
     # ---- 上肢：進度軌跡 ----
-    recorded = {r["exerciseType"] for r in rows if r.get("exerciseType")}
+    # 只看訓練中的幀：選擇動作畫面那幾十幀帶的是預設值 SQUAT，不是使用者做的動作
+    # （否則每份 CSV 都會多報一個 SQUAT，訊息反而誤導）。
+    recorded = {
+        r["exerciseType"] for r in training_frames(rows, has_quality)
+        if r.get("exerciseType")
+    } or {r["exerciseType"] for r in rows if r.get("exerciseType")}
     upper_exercises = {"ARM_RAISE", "CHEST_EXPANSION"}
     if recorded and not (recorded & upper_exercises):
         print(f"\n（這份錄影的動作是 {', '.join(sorted(recorded))}，跳過雙臂高舉的區段）")
@@ -271,6 +276,90 @@ def amplitude_vs_noise(vals, fps, label, scale):
     return None if drift_dominated else ratio
 
 
+def calibration_frames(rows, has_quality):
+    """站姿校正（STAND_HOLD）且通過品質檢查的幀 —— 判準分母就是從這裡量到的。"""
+    return [
+        r for r in rows
+        if r.get("state") == "STAND_HOLD"
+        and (not has_quality or r.get("qualityOk") == "true")
+    ]
+
+
+def baseline_reproducibility(rows, has_quality, fps, candidates):
+    """比對「站姿校正量到的基準」與「訓練中實際的靜止水位」。
+
+    ⚠️ 這是比訊噪比**更先決**的檢查，而這份工具原本完全沒做。
+    2026-10-02 兩場踮腳尖錄影：站近一點之後訊噪比從 6.9 漲到 25，
+    看起來像是「可以做了」—— 但狀態機實際跑在那份資料上是 **0 下**。
+    原因不是雜訊，是**基準跑掉**：使用者在校正後退了 6%，
+    腿長從 291.9px 變成 274.2px，於是整場訓練的進度全是負的。
+
+    位移只有腿長 7.8% 的動作，禁不起這種誤差。判據：
+      基準誤差 / 單週期振幅  < 0.3 → 絕對判準可用
+                             0.3~1 → 勉強，校正程序必須很嚴格
+                             > 1   → 絕對判準不可行（誤差比訊號還大）
+    """
+    cal = calibration_frames(rows, has_quality)
+    trn = training_frames(rows, has_quality)
+    if len(cal) < 10 or len(trn) < 80:
+        return
+    print("\n  校正基準的可重現性（比訊噪比更先決）：")
+    print(f"    {'候選訊號':<22}{'校正基準':>10}{'訓練靜止':>10}"
+          f"{'基準誤差':>10}{'單週期振幅':>11}{'誤差/振幅':>10}")
+    window = max(10, int(2.0 * fps))
+    worst = None
+    for label, fn in candidates:
+        cv = [v for v in (fn(r) for r in cal) if v is not None]
+        tv = [v for v in (fn(r) for r in trn) if v is not None]
+        if len(cv) < 10 or len(tv) <= window:
+            continue
+        amp = st.median([
+            max(tv[i:i + window]) - min(tv[i:i + window])
+            for i in range(0, len(tv) - window, 5)
+        ])
+        base = st.mean(cv)
+        rest = sorted(tv)[len(tv) // 10]      # 訓練中的靜止水位
+        err = abs(rest - base)
+        ratio = err / amp if amp > 0 else float("inf")
+        mark = "✅" if ratio < 0.3 else ("⚠️ " if ratio <= 1.0 else "❌ 誤差大於訊號")
+        worst = ratio if worst is None else max(worst, ratio)
+        print(f"    {label:<22}{base:>10.4f}{rest:>10.4f}"
+              f"{err:>10.4f}{amp:>11.4f}{ratio:>10.2f} {mark}")
+    if worst is not None and worst > 1.0:
+        print("\n    ❌ 至少一個候選訊號的基準誤差大於振幅 —— "
+              "「站姿校正取基準、之後比對絕對位移」這條路對這個動作不可行。")
+        print("       站姿校正與訓練之間只要站位移動幾個百分點，"
+              "誤差就蓋過整個動作幅度。")
+
+
+def lift_attenuation(rows, has_quality, scale, fps):
+    """同一次抬升在髖/膝/踝/腳跟上各被量到多少 —— 檢查關鍵點有沒有低估位移。
+
+    小腿是剛體：腳掌踩地、以腳尖為軸抬起時，**膝的上升量必須等於踝的上升量**。
+    若量到的膝遠大於踝，那不是使用者的動作，是關鍵點本身被模型的先驗壓住。
+    """
+    good = training_frames(rows, has_quality)
+    if len(good) < 80 or not scale:
+        return
+    print("\n  同一次抬升在各關鍵點上量到的幅度（腿長比）：")
+    print("    小腿是剛體 → 膝與踝的上升量**理論上必須相等**。")
+    # 用「2 秒窗內的最大-最小」而不是全程百分位 —— 否則走出畫面那幾秒的飄移
+    # 會被算成抬升量，整張表會和上面那張（同樣用 2 秒窗）互相矛盾。
+    window = max(10, int(2.0 * fps))
+    for label, col in (("髖", "LEFT_HIP_ema_y"), ("膝", "LEFT_KNEE_ema_y"),
+                       ("踝", "LEFT_ANKLE_ema_y"), ("腳跟", "LEFT_HEEL_ema_y")):
+        vals = [v for v in (fnum(r, col) for r in good) if v is not None]
+        if len(vals) <= window:
+            continue
+        amp = st.median([
+            max(vals[i:i + window]) - min(vals[i:i + window])
+            for i in range(0, len(vals) - window, 5)
+        ])
+        print(f"    {label:<4}{amp / scale:>8.3f}")
+    print("    ⚠️  若「膝」明顯大於「踝」，代表腳部關鍵點低估了實際抬升，"
+          "不是使用者踮得不夠高。")
+
+
 def heel_raise_report(rows, has_quality, fps):
     """踮腳尖的可行性診斷：腳跟/腳尖信心值夠不夠、位移有沒有高過雜訊。"""
     print("\n【踮腳尖訊號可行性】")
@@ -336,13 +425,42 @@ def heel_raise_report(rows, has_quality, fps):
     print("  「✗ 飄移主導」= 飄移大於振幅，這段資料被身體移動主導，數字不代表動作幅度。")
     print("\n  ⚠️  這一段只有在**這場錄影真的是在踮腳尖**時才有意義。")
     print("     拿別的動作（例如站著做擴胸）的錄影來看，算出來的是腳的晃動，不是踮腳。")
+
+    lift_attenuation(rows, has_quality, scale, fps)
+
+    # ⚠️ 訊噪比**不是**決定性的指標。2026-10-02 站近一點之後訊噪比從 6.9 漲到 25，
+    # 但狀態機跑在同一份資料上是 0 下 —— 卡在基準，不是卡在雜訊。
+    def mean_y(row, *points):
+        vals = [fnum(row, f"{p}_ema_y") for p in points]
+        return None if any(v is None for v in vals) else sum(vals) / len(vals)
+
+    def ratio_signal(numer_lo, numer_hi, denom_lo, denom_hi):
+        def fn(row):
+            a = mean_y(row, *numer_lo)
+            b = mean_y(row, *numer_hi)
+            c = mean_y(row, *denom_lo)
+            d = mean_y(row, *denom_hi)
+            if None in (a, b, c, d) or c - d <= 0:
+                return None
+            return (a - b) / (c - d)
+        return fn
+
+    hips = ("LEFT_HIP", "RIGHT_HIP")
+    toes = ("LEFT_TOE", "RIGHT_TOE")
+    heels = ("LEFT_HEEL", "RIGHT_HEEL")
+    ankles = ("LEFT_ANKLE", "RIGHT_ANKLE")
+    baseline_reproducibility(rows, has_quality, fps, [
+        ("(腳尖−髖)/(踝−髖)", ratio_signal(toes, hips, ankles, hips)),
+        ("(腳尖−腳跟)/(踝−髖)", ratio_signal(toes, heels, ankles, hips)),
+    ])
+
     if not ratios:
         print("\n  ❌ 所有候選訊號都被飄移主導 —— 這份錄影不能當踮腳尖的證據。")
     elif max(ratios) < 10:
-        print(f"\n  ⚠️  最好的腳跟訊號只有 {max(ratios):.1f} —— 落在「勉強」區間。")
-        print("     建議再錄一場：**站近一點**（讓腿在畫面裡更大）並刻意踮到最高，")
-        print("     看振幅/雜訊會不會進到 10 以上。若仍停在 6~7，")
-        print("     就該承認單一前視角相機量不準這個動作，並把它寫成論文的限制。")
+        print(f"\n  ⚠️  最好的腳跟訊號只有 {max(ratios):.1f}（<10）。")
+    else:
+        print(f"\n  訊噪比最好的腳跟訊號是 {max(ratios):.1f} —— 但這不足以下結論，")
+        print("     決定性的是上面那張「校正基準的可重現性」表。")
 
 
 def main():
