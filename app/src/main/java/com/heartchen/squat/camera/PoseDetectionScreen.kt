@@ -390,6 +390,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         rawByType = rejected.keyPoints.associateBy { it.type },
                         emaByType = emptyMap(),
                         state = flowStep.name,
+                        exerciseType = selectedExercise.name,
                         qualityOk = false,
                         framingIssue = currentFramingIssue.name
                     )
@@ -547,6 +548,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 rawByType = frame.keyPoints.associateBy { it.type },
                 emaByType = smoothedByType,
                 state = stateForLog,
+                exerciseType = selectedExercise.name,
                 qualityOk = true,
                 framingIssue = currentFramingIssue.name
             )

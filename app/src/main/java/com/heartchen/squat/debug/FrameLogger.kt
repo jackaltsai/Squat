@@ -28,6 +28,9 @@ private val LOGGED_KEYPOINTS = KeyPointType.entries
  * M4 除錯/研究模式：把每一幀的原始關鍵點座標、EMA 平滑後座標與狀態機狀態寫成 CSV，
  * 供後續用 Python 讀取、跟人工標註比對（見 CLAUDE.md M4 驗收標準）。
  *
+ * 每一列都帶 `exerciseType` —— 沒有它的話，分析工具無從判斷該套用哪一種診斷，
+ * 只能把所有區段都印出來（曾經對一場高抬腿錄影印出「雙臂高舉的進度軌跡」）。
+ *
  * **被品質檢查擋下的幀也會記錄**（`qualityOk = false`，EMA 欄位留空）。
  * 只記通過的幀的話，CSV 完全看不出是哪個關鍵點、在什麼數值上把整幀擋掉 ——
  * 而「為什麼不計次」的答案往往就在被擋掉的那些幀裡。
@@ -54,7 +57,9 @@ class FrameLogger(context: Context) {
     val filePath: String get() = file.absolutePath
 
     private fun buildHeader(): String {
-        val cols = mutableListOf("frameTimestampMs", "state", "qualityOk", "framingIssue")
+        val cols = mutableListOf(
+            "frameTimestampMs", "exerciseType", "state", "qualityOk", "framingIssue"
+        )
         for (type in LOGGED_KEYPOINTS) {
             cols += "${type.name}_raw_x"
             cols += "${type.name}_raw_y"
@@ -72,11 +77,13 @@ class FrameLogger(context: Context) {
         rawByType: Map<KeyPointType, KeyPoint>,
         emaByType: Map<KeyPointType, KeyPoint>,
         state: String,
+        exerciseType: String,
         qualityOk: Boolean = true,
         framingIssue: String = ""
     ) {
         val values = mutableListOf(
             System.currentTimeMillis().toString(),
+            exerciseType,
             state,
             qualityOk.toString(),
             framingIssue

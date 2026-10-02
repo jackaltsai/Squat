@@ -144,14 +144,18 @@ def report(path):
 
     # ---- 腳部：踮腳尖可行性 ----
     if not missing_foot:
-        heel_raise_report(rows, has_quality)
+        heel_raise_report(rows, has_quality, len(rows) / dur if dur else 25.0)
     else:
         print("\n【踮腳尖訊號可行性】")
         print(f"  這份 CSV 缺少腳部關鍵點：{', '.join(missing_foot)}")
         print("  請用新版 App（2026-10-02 之後）重錄，才會記錄腳跟與腳尖。")
 
     # ---- 上肢：進度軌跡 ----
-    if not missing_upper:
+    recorded = {r["exerciseType"] for r in rows if r.get("exerciseType")}
+    upper_exercises = {"ARM_RAISE", "CHEST_EXPANSION"}
+    if recorded and not (recorded & upper_exercises):
+        print(f"\n（這份錄影的動作是 {', '.join(sorted(recorded))}，跳過雙臂高舉的區段）")
+    elif not missing_upper:
         print("\n【雙臂高舉的進度軌跡】")
         calib = [r for r in rows if r["state"] == "STAND_HOLD"
                  and (not has_quality or r["qualityOk"].lower() == "true")]
@@ -215,17 +219,62 @@ def report(path):
                   f"低於門檻 {below/len(v):.0%}")
 
 
-def heel_raise_report(rows, has_quality):
+SETUP_STATES = {"SELECT_EXERCISE", "STAND_HOLD", "READY_COUNTDOWN", "TRAINING", "FINISHED"}
+
+
+def training_frames(rows, has_quality):
+    """只取『訓練中、而且通過品質檢查』的幀。
+
+    ⚠️ 不能拿全部幀算信心值。使用者走到鏡頭前之前（`SELECT_EXERCISE`）根本沒被偵測到，
+    把那些幀混進來會把達門檻比例稀釋掉 —— 2026-10-02 那場因此印出
+    「腳部信心值不足、不可行」，而同一份資料的中位數是 0.999，自相矛盾。
+    `state` 為流程名稱（而非狀態機狀態）的那幾列是被擋下的幀，也要排除。
+    """
+    out = [
+        r for r in rows
+        if r.get("state") not in SETUP_STATES
+        and (not has_quality or r["qualityOk"].lower() == "true")
+    ]
+    return out if out else rows
+
+
+def amplitude_vs_noise(vals, fps, label, scale):
+    """回傳（單週期振幅、飄移、雜訊底）。
+
+    用「2 秒窗內的最大-最小」當振幅，而不是全程的 5%~95% 範圍 ——
+    後者會把**慢速飄移**算進訊號。2026-10-02 那場的髖部全程範圍 28px，
+    但單週期振幅只有 18px、飄移 10px；拿範圍當訊號會高估髖的可用性。
+    """
+    window = max(10, int(2.0 * fps))
+    if len(vals) <= window:
+        return None
+    amps = [
+        max(vals[i:i + window]) - min(vals[i:i + window])
+        for i in range(0, len(vals) - window, 5)
+    ]
+    amp = st.median(amps)
+    lo = sorted(vals)[len(vals) // 20]
+    hi = sorted(vals)[-max(1, len(vals) // 20)]
+    drift = max(0.0, (hi - lo) - amp)
+    noise = min(st.pstdev(vals[i:i + 30]) for i in range(0, len(vals) - 30, 5))
+    ratio = amp / noise if noise > 0 else float("inf")
+    mark = "✅" if ratio >= 10 else ("⚠️ " if ratio >= 4 else "❌")
+    extra = f"{amp / scale:>8.3f}" if scale else " " * 8
+    print(f"    {label:<22}{amp:>8.1f}{extra}{drift:>8.1f}{noise:>7.2f}{ratio:>8.1f} {mark}")
+    return ratio
+
+
+def heel_raise_report(rows, has_quality, fps):
     """踮腳尖的可行性診斷：腳跟/腳尖信心值夠不夠、位移有沒有高過雜訊。"""
     print("\n【踮腳尖訊號可行性】")
-    good = [r for r in rows if not has_quality or r["qualityOk"].lower() == "true"]
-    if not good:
-        good = rows
+    good = training_frames(rows, has_quality)
+    print(f"  取樣：訓練中且通過品質檢查的 {len(good)} 幀"
+          f"（全部 {len(rows)} 幀）")
 
-    print("  腳部關鍵點的信心值：")
+    print("\n  腳部關鍵點的信心值：")
     usable = True
     for point in FOOT:
-        vals = [v for v in (fnum(r, f"{point}_raw_confidence") for r in rows) if v is not None]
+        vals = [v for v in (fnum(r, f"{point}_raw_confidence") for r in good) if v is not None]
         if not vals:
             print(f"    {point:12} 沒有資料")
             usable = False
@@ -236,8 +285,7 @@ def heel_raise_report(rows, has_quality):
         if above / len(vals) < 0.8:
             usable = False
     if not usable:
-        print("\n  ⚠️  腳部關鍵點的信心值不足，以腳跟/腳尖為訊號不可行。")
-        print("     改用「髖或踝的上升量」會被身體晃動污染，需要另想判準。")
+        print("\n  ❌ 腳部關鍵點的信心值不足，以腳跟/腳尖為訊號不可行。")
 
     # 腳跟相對腳尖的垂直落差（局部量測，不受身體晃動影響）
     def heel_above_toe(row, side):
@@ -249,40 +297,37 @@ def heel_raise_report(rows, has_quality):
 
     scale_vals = []
     for r in good:
-        hip = fnum(r, "LEFT_HIP_raw_y")
-        ankle = fnum(r, "LEFT_ANKLE_raw_y")
+        hip = fnum(r, "LEFT_HIP_ema_y") or fnum(r, "LEFT_HIP_raw_y")
+        ankle = fnum(r, "LEFT_ANKLE_ema_y") or fnum(r, "LEFT_ANKLE_raw_y")
         if hip is not None and ankle is not None and ankle > hip:
             scale_vals.append(ankle - hip)
     scale = st.median(scale_vals) if scale_vals else None
     if scale:
         print(f"\n  身體比例尺（髖-踝）= {scale:.1f}px")
 
+    # 狀態機吃的是 EMA 平滑後的值，所以比較各候選訊號時一律用 EMA 欄位。
+    print(f"\n    {'候選訊號':<22}{'週期振幅':>8}{'腿長比':>8}{'飄移':>8}{'雜訊':>7}{'振幅/雜訊':>9}")
+    ratios = []
     for side in ("LEFT", "RIGHT"):
         vals = [v for v in (heel_above_toe(r, side) for r in good) if v is not None]
-        if len(vals) < 10:
-            continue
-        lo = sorted(vals)[len(vals) // 20]
-        hi = sorted(vals)[-max(1, len(vals) // 20)]
-        span = hi - lo
-        print(f"  {side:5} 腳跟高於腳尖：5% {lo:7.1f}px　95% {hi:7.1f}px　"
-              f"活動範圍 {span:6.1f}px", end="")
-        if scale:
-            print(f"（= {span/scale:.3f} 個腿長）")
-        else:
-            print()
-        # 雜訊底：取變化最小的連續 30 幀當作「靜止段」
-        window = 30
-        if len(vals) > window:
-            noise = min(
-                st.pstdev(vals[i:i + window])
-                for i in range(0, len(vals) - window, 5)
-            )
-            ratio = span / noise if noise > 0 else float("inf")
-            mark = "✅" if ratio >= 10 else ("⚠️ " if ratio >= 4 else "❌")
-            print(f"        最靜止 30 幀的標準差（雜訊底）= {noise:.2f}px　"
-                  f"訊噪比 {ratio:.1f} {mark}")
-    print("\n  訊噪比 ≥10 代表訊號清楚可用；4~10 勉強；<4 代表位移淹在雜訊裡，")
-    print("  那就不該用這個量當訊號，也不該憑推算訂門檻。")
+        if len(vals) > 10:
+            r = amplitude_vs_noise(vals, fps, f"{side} 腳跟-腳尖", scale)
+            if r:
+                ratios.append(r)
+    # 對照組：踝與髖的上升量（理論上會被身體晃動污染）
+    for label, col in (("踝上升", "LEFT_ANKLE_ema_y"), ("髖上升", "LEFT_HIP_ema_y")):
+        vals = [-v for v in (fnum(r, col) for r in good) if v is not None]
+        if len(vals) > 10:
+            amplitude_vs_noise(vals, fps, label, scale)
+
+    print("\n  「振幅」是 2 秒窗內的最大-最小（約一個動作週期），不是全程範圍 ——")
+    print("  全程範圍會把慢速飄移算進訊號。「飄移」是全程範圍扣掉單週期振幅。")
+    print("  振幅/雜訊 ≥10 清楚可用；4~10 勉強；<4 位移淹在雜訊裡。")
+    if ratios and max(ratios) < 10:
+        print(f"\n  ⚠️  最好的腳跟訊號只有 {max(ratios):.1f} —— 落在「勉強」區間。")
+        print("     建議再錄一場：**站近一點**（讓腿在畫面裡更大）並刻意踮到最高，")
+        print("     看振幅/雜訊會不會進到 10 以上。若仍停在 6~7，")
+        print("     就該承認單一前視角相機量不準這個動作，並把它寫成論文的限制。")
 
 
 def main():
