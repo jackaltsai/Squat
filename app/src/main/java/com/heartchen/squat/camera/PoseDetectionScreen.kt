@@ -127,6 +127,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // 手臂動作時髖與踝可能根本沒偵測到，一起累加會讓站姿校正永遠跑不完。
     var standCalibrator by remember { mutableStateOf<StandCalibrator?>(null) }
     var standCalibrationWarning by remember { mutableStateOf<String?>(null) }
+    // 站姿校正被判定不合理（如手臂長/肩寬超出解剖學區間）時要求重做的次數。
+    // 用完上限就照收 —— 與深蹲的基準校正同樣的取捨：卡在校正出不去更糟，
+    // 而 CSV 的 duser 會留下證據，事後分析看得出那一場校正品質不佳。
+    var standCalibrationRetryCount by remember { mutableIntStateOf(0) }
     // 站姿校正產生的動作訊號，整場訓練固定不變，確保 p 的計算基準前後一致。
     // **是清單**：原地高抬腿左右腳各一個訊號、各一台狀態機 ——
     // 兩腳的抬腿半波連續鋪滿，用單一訊號會讓進度永遠回不到返回門檻以下，
@@ -415,15 +419,22 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val startMs = standHoldStartMs ?: System.currentTimeMillis().also { standHoldStartMs = it }
                         standHoldElapsedMs = System.currentTimeMillis() - startMs
                         if (standHoldElapsedMs >= Config.STAND_HOLD_DURATION_MS) {
-                            val signals = calibrator.build()
+                            // 重試次數用完就放寬解剖學合理性檢查，照收當下的量測。
+                            val strict = standCalibrationRetryCount < Config.CALIBRATION_MAX_RETRIES
+                            val signals = calibrator.build(strict = strict)
                             if (signals.isEmpty()) {
                                 // 站姿量測無效，例如舉手動作在校正時就把手舉著，
                                 // 手腕沒有低於肩、判準會是 0 或負數。必須重來並說明原因 ——
                                 // 不說的話使用者會卡在「倒數結束了卻什麼都沒發生」的畫面。
-                                Log.w(TAG, "Stand calibration invalid for $selectedExercise")
+                                Log.w(
+                                    TAG,
+                                    "Stand calibration rejected for $selectedExercise " +
+                                        "(retry=$standCalibrationRetryCount strict=$strict)"
+                                )
                                 standCalibrator = null
                                 standHoldStartMs = null
                                 standHoldElapsedMs = 0L
+                                standCalibrationRetryCount += 1
                                 standCalibrationWarning = calibrationHintFor(selectedExercise)
                             } else {
                                 repSignals = signals
@@ -824,6 +835,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     standCalibrator = null
                     repSignals = emptyList()
                     standCalibrationWarning = null
+                    standCalibrationRetryCount = 0
                     duser = null
                     standHoldStartMs = null
                     standHoldElapsedMs = 0L

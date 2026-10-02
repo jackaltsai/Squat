@@ -245,8 +245,12 @@ interface StandCalibrator {
      * 回傳清單而非單一訊號，是因為左右交替的動作（原地高抬腿）必須左右各一個
      * 獨立訊號、各一台狀態機 —— 用單一訊號會讓兩次抬腿併成一次甚至完全計不到
      * （見 [HighKneeSignal] 的註解）。其餘動作回傳一個元素。
+     *
+     * [strict] 為 false 時跳過「解剖學合理性」檢查（如手臂長/肩寬是否在合理區間），
+     * 但**不跳過**會產生垃圾判準的硬性檢查（如手臂長 ≤ 0）。
+     * 呼叫端在重試次數用完後用它照收，避免使用者卡在校正出不去。
      */
-    fun build(): List<RepSignal>
+    fun build(strict: Boolean = true): List<RepSignal>
 }
 
 /** 深蹲家族：量髖部站立基準高度與「髖-踝」垂直距離。 */
@@ -273,7 +277,7 @@ class LowerBodyStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): List<RepSignal> {
+    override fun build(strict: Boolean): List<RepSignal> {
         val baseline = baselineY ?: return emptyList()
         val scale = normalizeScale ?: return emptyList()
         if (scale <= 0f) return emptyList()
@@ -300,13 +304,14 @@ class ArmRaiseStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): List<RepSignal> {
+    override fun build(strict: Boolean): List<RepSignal> {
         if (sampleCount == 0) return emptyList()
         val drop = dropSum / sampleCount
         val width = widthSum / sampleCount
         // 站姿時手腕必須確實低於肩：若使用者校正時就把手舉著，drop <= 0，
         // target 會是 0 或負數，之後每一下的 p 都會變成無意義的數字。
         if (drop <= 0f || width <= 0f) return emptyList()
+        if (strict && !isPlausibleArmToShoulder(drop / width)) return emptyList()
         return listOf(ArmRaiseSignal(drop, width))
     }
 }
@@ -331,7 +336,7 @@ class ChestExpansionStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): List<RepSignal> {
+    override fun build(strict: Boolean): List<RepSignal> {
         if (sampleCount == 0) return emptyList()
         val separation = separationSum / sampleCount
         val width = widthSum / sampleCount
@@ -339,6 +344,7 @@ class ChestExpansionStandCalibrator : StandCalibrator {
         // 站姿時手腕必須確實低於肩（arm > 0）；若使用者校正時就把手張開或舉著，
         // 量到的站姿基準不可信，判準會變成 0 或負數，之後每一下的 p 都沒有意義。
         if (width <= 0f || arm <= 0f) return emptyList()
+        if (strict && !isPlausibleArmToShoulder(arm / width)) return emptyList()
         val signal = ChestExpansionSignal(separation, width, arm)
         // 站姿腕距已達或超過判準腕距時（例如校正時就把手張開），門檻會錯亂，
         // 之後每一下的計次與 p 都沒有意義。
@@ -376,7 +382,7 @@ class HighKneesStandCalibrator : StandCalibrator {
         return true
     }
 
-    override fun build(): List<RepSignal> {
+    override fun build(strict: Boolean): List<RepSignal> {
         if (sampleCount == 0) return emptyList()
         val hipY = hipSum / sampleCount
         val scale = ankleSum / sampleCount - hipY
@@ -391,6 +397,17 @@ class HighKneesStandCalibrator : StandCalibrator {
         )
     }
 }
+
+/**
+ * 站姿量到的「手臂長 ÷ 肩寬」是否落在解剖學合理區間。
+ *
+ * 兩個上肢動作的判準都建立在手臂長上。手沒有完全自然下垂時手臂長被低估，
+ * 判準跟著變小、**整場 p 都偏高、假性達標** —— 實測六場裡有兩場如此
+ * （0.962 / 1.069，而正常的四場是 1.348~1.409）。
+ * 區間見 [Config.CALIBRATION_MIN_ARM_TO_SHOULDER]。
+ */
+internal fun isPlausibleArmToShoulder(ratio: Float): Boolean =
+    ratio in Config.CALIBRATION_MIN_ARM_TO_SHOULDER..Config.CALIBRATION_MAX_ARM_TO_SHOULDER
 
 /**
  * 取得動作對應的站姿校正累加器。

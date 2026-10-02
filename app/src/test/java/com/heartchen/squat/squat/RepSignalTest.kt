@@ -119,6 +119,56 @@ class RepSignalTest {
         )
     }
 
+    /**
+     * 上肢動作的判準建立在站姿量到的手臂長上。手沒有完全自然下垂時手臂長被低估，
+     * 判準跟著變小、整場 p 偏高、假性達標 —— 實測六場裡有兩場如此
+     * （0.962 / 1.069，正常的四場是 1.348~1.409）。
+     *
+     * 區間刻意從解剖學推導（成人肩峰間距 36~42cm、肩到腕 50~62cm → 1.19~1.72），
+     * 不是從那六場配出來的（都是同一人，跨受試者變異未知）。
+     */
+    @Test
+    fun `站姿校正會擋掉解剖學上不合理的手臂長肩寬比`() {
+        // 實測正常的四場都該通過
+        listOf(1.348f, 1.370f, 1.394f, 1.409f).forEach {
+            assertTrue("$it 應視為合理", isPlausibleArmToShoulder(it))
+        }
+        // 實測偏低的兩場都該被擋
+        listOf(0.962f, 1.069f).forEach {
+            assertTrue("$it 應被擋掉", !isPlausibleArmToShoulder(it))
+        }
+    }
+
+    @Test
+    fun `手臂長肩寬比不合理時拒絕產生訊號，但放寬後照收`() {
+        // 手腕只低於肩 100px、肩寬 140px → 比值 0.71，遠低於下界
+        val c = ArmRaiseStandCalibrator()
+        repeat(5) { c.accumulate(upperBody(shoulderY + 100f)) }
+        assertTrue("嚴格模式應拒絕", c.build().isEmpty())
+        assertEquals("放寬後應照收", 1, c.build(strict = false).size)
+    }
+
+    @Test
+    fun `擴胸的站姿校正也會檢查手臂長肩寬比`() {
+        // chest() 的手臂長固定為 ceArmLength=196、肩寬 140 → 比值 1.4，合理
+        val good = ChestExpansionStandCalibrator()
+        repeat(5) { good.accumulate(chest(ceRestSeparation)) }
+        assertEquals(1, good.build().size)
+    }
+
+    @Test
+    fun `深蹲與高抬腿不受手臂長肩寬比檢查影響`() {
+        // 這兩個動作的判準與手臂無關，strict 與否都該照常產生訊號
+        val lower = LowerBodyStandCalibrator()
+        repeat(5) { lower.accumulate(knees(0f, 0f)) }
+        assertEquals(1, lower.build().size)
+        assertEquals(1, lower.build(strict = false).size)
+
+        val hk = HighKneesStandCalibrator()
+        repeat(5) { hk.accumulate(knees(0f, 0f)) }
+        assertEquals(2, hk.build().size)
+    }
+
     @Test
     fun `深蹲家族的 target 為 null，其餘動作為非 null`() {
         // target == null 是「需要兩下基準校正取得 Duser」的唯一判斷依據
