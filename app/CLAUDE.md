@@ -194,10 +194,15 @@ UI: Jetpack Compose
 | `SquatStateMachineTest` | 8 |
 | `ExampleUnitTest`（專案模板） | 1 |
 
-⚠️ 這個環境沒有 Android SDK，無法編譯或執行；`RepSignalTest` 與
-`FramingGuidanceTest` 的新增測試**尚未在有 SDK 的環境跑過**。
-舉手與框位的數值已用 Python 逐位元模擬驗算（float32 + `java.util.Random` LCG），
-但那只證明邏輯一致，不等於 Kotlin 編譯與執行通過。
+✅ **2026-10-02 `./gradlew test` BUILD SUCCESSFUL**（在有 SDK 的環境）。
+在那之前這些測試從未被編譯或執行過 —— Claude Code 這個環境沒有 Android SDK，
+數值只能用 Python 逐位元模擬驗算（float32 + `java.util.Random` LCG）。
+那只證明邏輯一致，不等於 Kotlin 編譯與執行通過，而這次的差別是實質的：
+上一輪就是在這裡被 `isPlausibleArmToShoulder` 擋出一條 `NoSuchElementException`
+（測試 fixture 的身材比例 2.14 不符解剖學，見下方）。
+
+⚠️ 所以**每次改 `RepSignalTest` / `FramingGuidanceTest` 的 fixture 之後，
+都要請使用者在 Android Studio 跑一次 `./gradlew test`**，不能只靠模擬。
 
 ### 待決：M8 下一步先做哪個？
 1. ~~坐站練習~~ ✅ 已實作並實機驗證
