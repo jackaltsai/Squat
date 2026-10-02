@@ -94,6 +94,31 @@ class RepSignalTest {
         }
     }
 
+    /**
+     * 膝內夾判定只對雙腳站地的下肢動作有意義。
+     *
+     * 2026-10-02 實機的高抬腿紀錄裡 `kneeValgusRatio` 落在 −0.26 ~ −0.55，
+     * 看起來像「量到了而且沒內夾」，實際上一腳離地、公式毫無意義。
+     * 不擋就會把垃圾數值寫進資料庫，污染 M5 的門檻掃描驗證集。
+     */
+    @Test
+    fun `膝內夾判定只開給雙腳站地的下肢動作`() {
+        val shouldJudge = setOf(
+            ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT, ExerciseType.HEEL_RAISE
+        )
+        ExerciseType.entries.forEach { exercise ->
+            assertEquals(
+                "${exercise.name} 的膝內夾判定開關不對",
+                exercise in shouldJudge,
+                judgesKneeValgus(exercise)
+            )
+        }
+        // 高抬腿刻意不宣告踝（抬起那腳的踝會掉信心值），所以自然被擋掉
+        assertTrue(
+            KeyPointType.LEFT_ANKLE !in ExerciseType.HIGH_KNEES.requiredPoints
+        )
+    }
+
     @Test
     fun `深蹲家族的 target 為 null，其餘動作為非 null`() {
         // target == null 是「需要兩下基準校正取得 Duser」的唯一判斷依據

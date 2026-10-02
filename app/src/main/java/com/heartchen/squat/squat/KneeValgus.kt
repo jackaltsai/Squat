@@ -15,6 +15,28 @@ import kotlin.math.abs
  * 拿極小的髖寬當分母會讓比例被異常放大、誤判為膝內夾，
  * 因此用「髖寬 / 腿長」這個跟拍攝距離無關的比例，過濾掉髖寬不可靠（例如側身）的幀。
  */
+/**
+ * 這個動作該不該做膝內夾判定。
+ *
+ * 公式是「(踝距 − 膝距) ÷ 髖寬」，**只對雙腳站地的下肢動作有意義** ——
+ * 兩膝與兩踝都在地面上才能互相比較。判據取「同時宣告需要兩膝與兩踝」：
+ *
+ * | 動作 | 判定 | 原因 |
+ * |---|---|---|
+ * | 深蹲、坐站、踮腳尖 | ✅ | 雙腳站地，兩膝兩踝可比 |
+ * | 原地高抬腿 | ✗ | 一腳離地，公式失去意義（刻意不宣告踝） |
+ * | 雙臂高舉、擴胸推掌 | ✗ | 根本不看下肢 |
+ *
+ * ⚠️ 不擋的話會寫入**垃圾數值**而非 null —— 2026-10-02 實機的高抬腿紀錄
+ * `kneeValgusRatio` 落在 −0.26 ~ −0.55，看起來像「量到了而且沒內夾」，
+ * 實際上那個數字毫無意義。M5 做門檻掃描時若把這些列入，會污染驗證集。
+ */
+fun judgesKneeValgus(exercise: ExerciseType): Boolean =
+    KeyPointType.LEFT_KNEE in exercise.requiredPoints &&
+        KeyPointType.RIGHT_KNEE in exercise.requiredPoints &&
+        KeyPointType.LEFT_ANKLE in exercise.requiredPoints &&
+        KeyPointType.RIGHT_ANKLE in exercise.requiredPoints
+
 fun kneeValgusRatio(keyPointsByType: Map<KeyPointType, KeyPoint>): Float? {
     val leftHip = keyPointsByType[KeyPointType.LEFT_HIP] ?: return null
     val rightHip = keyPointsByType[KeyPointType.RIGHT_HIP] ?: return null

@@ -67,6 +67,7 @@ import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
 import com.heartchen.squat.squat.detectKneeValgus
 import com.heartchen.squat.squat.evaluateDepthFeedback
+import com.heartchen.squat.squat.judgesKneeValgus
 import com.heartchen.squat.squat.kneeValgusRatio
 import com.heartchen.squat.squat.standCalibratorFor
 import com.heartchen.squat.stats.DateBuckets
@@ -500,8 +501,11 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         val dNow = triggered.lastPeakProgress
                         // 深蹲家族用校正所得的 Duser，其餘動作用觸發那台狀態機自己的判準。
                         val dUser = duser ?: triggered.signal.target
-                        val kneeValgus = detectKneeValgus(smoothedByType)
-                        val valgusRatio = kneeValgusRatio(smoothedByType)
+                        // 膝內夾只對雙腳站地的下肢動作有意義。不擋的話，高抬腿（一腳離地）
+                        // 與手臂動作會寫入看似合理卻毫無意義的數值，污染 M5 的驗證集。
+                        val judgeValgus = judgesKneeValgus(selectedExercise)
+                        val kneeValgus = if (judgeValgus) detectKneeValgus(smoothedByType) else null
+                        val valgusRatio = if (judgeValgus) kneeValgusRatio(smoothedByType) else null
                         kneeValgusFlag = kneeValgus == true
                         Log.d(TAG, "kneeValgusRatio=$valgusRatio kneeValgus=$kneeValgus")
                         if (dNow != null && dUser != null && dUser > 0f) {
