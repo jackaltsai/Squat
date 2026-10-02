@@ -180,6 +180,138 @@ class RepSignalTest {
         assertEquals(0, c.sampleCount)
     }
 
+    // ---- 擴胸推掌 ----
+
+    // 解剖學上合理的測試身材：肩寬 140、手臂長 1.4 倍肩寬 = 196、站姿腕距 0.9 倍肩寬 = 126。
+    // （上面舉手那組刻意用了手臂長 300 的誇張值來放大訊號，這裡換成真實比例，
+    //  因為擴胸的判準直接由「肩寬 + 2×手臂長」算出，比例失真會讓斷言失去意義。）
+    private val ceShoulderWidth = 140f
+    private val ceArmLength = 196f
+    private val ceRestSeparation = 126f
+
+    /** 左右手腕對稱地以 [separation] 的間距放在身前。 */
+    private fun chest(separation: Float): Map<KeyPointType, KeyPoint> {
+        val cx = 360f
+        val wristY = shoulderY + ceArmLength
+        return mapOf(
+            KeyPointType.LEFT_SHOULDER to
+                KeyPoint(KeyPointType.LEFT_SHOULDER, cx - ceShoulderWidth / 2f, shoulderY, 0.9f),
+            KeyPointType.RIGHT_SHOULDER to
+                KeyPoint(KeyPointType.RIGHT_SHOULDER, cx + ceShoulderWidth / 2f, shoulderY, 0.9f),
+            KeyPointType.LEFT_WRIST to
+                KeyPoint(KeyPointType.LEFT_WRIST, cx - separation / 2f, wristY, 0.9f),
+            KeyPointType.RIGHT_WRIST to
+                KeyPoint(KeyPointType.RIGHT_WRIST, cx + separation / 2f, wristY, 0.9f),
+        )
+    }
+
+    private fun chestSignal() =
+        ChestExpansionSignal(ceRestSeparation, ceShoulderWidth, ceArmLength)
+
+    @Test
+    fun `擴胸站姿時進度為零`() {
+        assertEquals(0f, chestSignal().progress(chest(ceRestSeparation))!!, 1e-4f)
+    }
+
+    @Test
+    fun `擴胸判準由肩寬與手臂長算出，不是寫死的距離`() {
+        // 幾何最大側展腕距 = 肩寬 + 2×手臂長 = 140 + 392 = 532
+        // 判準腕距 = 532 × 0.6 = 319.2　→　target = (319.2 − 126) / 140 ≈ 1.38
+        val full = ceShoulderWidth + 2f * ceArmLength
+        val expected = (full * 0.6f - ceRestSeparation) / ceShoulderWidth
+        assertEquals(expected, chestSignal().target!!, 1e-4f)
+        // 與雙臂高舉的 target（約 1.4 個肩寬）同量級，門檻才能沿用同一組比例
+        assertTrue("target 應在 1.2~1.6 之間，實際 ${chestSignal().target}",
+            chestSignal().target!! in 1.2f..1.6f)
+    }
+
+    @Test
+    fun `腕距達到判準時達成率為一`() {
+        val signal = chestSignal()
+        val full = ceShoulderWidth + 2f * ceArmLength
+        val p = signal.progress(chest(full * 0.6f))!! / signal.target!!
+        assertEquals(1f, p, 1e-3f)
+    }
+
+    /**
+     * 推掌（雙手在身前併攏）時腕距比站姿更小，進度為**負值**。
+     * 這是刻意的：推掌在正面視角量不到，它在這個模型裡就是這一下的返回階段，
+     * 負的進度自然滿足返回條件。
+     */
+    @Test
+    fun `雙手在身前併攏時進度為負`() {
+        val p = chestSignal().progress(chest(40f))!!
+        assertTrue("併攏時進度應為負，實際 $p", p < 0f)
+        assertTrue("併攏也應低於返回門檻", p < chestSignal().returnThreshold)
+    }
+
+    @Test
+    fun `擴胸缺少手腕關鍵點時回傳 null`() {
+        val noWrists = chest(ceRestSeparation)
+            .filterKeys { it != KeyPointType.LEFT_WRIST && it != KeyPointType.RIGHT_WRIST }
+        assertNull(chestSignal().progress(noWrists))
+    }
+
+    @Test
+    fun `擴胸的站姿校正取平均並產生可用訊號`() {
+        val c = ChestExpansionStandCalibrator()
+        listOf(120f, 132f, 124f, 128f, 126f).forEach { assertTrue(c.accumulate(chest(it))) }
+        assertEquals(5, c.sampleCount)
+        assertEquals(chestSignal().target!!, c.build()!!.target!!, 1e-2f)
+    }
+
+    /**
+     * 使用者在站姿校正時就把手張開 —— 站姿腕距已經超過判準，target 會是 0 或負數，
+     * 之後每一下的 p 都沒有意義。必須在這裡擋下來。
+     */
+    @Test
+    fun `擴胸校正時手已張開則拒絕產生訊號`() {
+        val c = ChestExpansionStandCalibrator()
+        // 站姿腕距 400 > 判準腕距 319
+        repeat(5) { c.accumulate(chest(400f)) }
+        assertNull(c.build())
+    }
+
+    @Test
+    fun `狀態機以擴胸訊號計為一下`() {
+        val signal = chestSignal()
+        val m = SquatStateMachine(signal)
+        // 打開：126 → 330（略超過判準腕距 319）
+        listOf(126f, 160f, 200f, 260f, 320f, 330f).forEach { m.update(chest(it)) }
+        // 收回推掌：330 → 126，並在身前停留足夠幀數
+        listOf(310f, 290f, 270f, 220f, 160f).forEach { m.update(chest(it)) }
+        repeat(8) { m.update(chest(126f)) }
+
+        assertEquals(1, m.repCount)
+        assertEquals(SquatState.STAND, m.state)
+        assertTrue("打開到略超過判準，p 應略大於 1",
+            m.lastPeakProgress!! / signal.target!! in 1.0f..1.2f)
+    }
+
+    @Test
+    fun `擴胸幅度太小不會被計次`() {
+        val m = SquatStateMachine(chestSignal())
+        repeat(4) {
+            // 腕距只開到 180（1.29 個肩寬），進度 0.386 < 進場門檻 0.414
+            listOf(126f, 150f, 180f, 150f, 126f).forEach { m.update(chest(it)) }
+            repeat(6) { m.update(chest(126f)) }
+        }
+        assertEquals(0, m.repCount)
+    }
+
+    @Test
+    fun `擴胸幅度不足但有動作仍會計次並給出紅燈級的達成率`() {
+        val signal = chestSignal()
+        val m = SquatStateMachine(signal)
+        // 開到 250（0.886 進度）—— 超過進場門檻，應被計次，但 p 只有約 0.64
+        listOf(126f, 180f, 220f, 250f).forEach { m.update(chest(it)) }
+        listOf(230f, 210f, 190f, 170f, 150f).forEach { m.update(chest(it)) }
+        repeat(8) { m.update(chest(126f)) }
+        assertEquals(1, m.repCount)
+        val p = m.lastPeakProgress!! / signal.target!!
+        assertTrue("幅度不足時 p 應低於入門綠燈門檻 0.90，實際 $p", p < 0.90f)
+    }
+
     // ---- 端到端：狀態機數舉手 ----
 
     /**

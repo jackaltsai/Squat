@@ -56,7 +56,7 @@ fun evaluateFraming(
     val byType = frame.keyPoints
         .filter { it.inFrameLikelihood >= Config.CONFIDENCE_THRESHOLD }
         .associateBy { it.type }
-    // 分流依據是「這個動作需不需要腳踝」，而不是比對關鍵點集合是否等於 UPPER_BODY。
+    // 分流依據是「這個動作需不需要腳踝」，而不是比對關鍵點集合是否相等。
     // 用集合相等比較的話，動作一旦只需要肩與腕（不含手肘）就會掉回下肢分支，
     // 「請往後站一點」整個回來 —— 判斷條件綁在集合的「身分」而非「內容」上太脆弱。
     return if (KeyPointType.LEFT_ANKLE in exercise.requiredPoints) {

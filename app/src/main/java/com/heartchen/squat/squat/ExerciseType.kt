@@ -88,11 +88,15 @@ enum class ExerciseType(
 
     CHEST_EXPANSION(
         label = "擴胸推掌",
-        requiredPoints = KeyPointType.UPPER_BODY,
-        guidance = "雙臂向後擴胸，再向前推掌。",
-        detectionImplemented = false,
+        // 同雙臂高舉：訊號只讀手腕，框位只讀肩與腕，手肘從未被讀取。
+        requiredPoints = KeyPointType.SHOULDER_AND_WRIST,
+        // 文案強調「向兩側打開」：系統量的是腕距，向前推掌在正面視角幾乎沒有位移、
+        // 量不到，所以要讓使用者知道達標靠的是打開的幅度。
+        guidance = "雙臂向兩側打開擴胸，再向前推掌。",
+        detectionImplemented = true,
         feedback = FeedbackMessages("幅度達標！", "再張開一點", "幅度太小了"),
         iconRes = R.drawable.ic_exercise_chest_expansion,
+        safetyNote = "肩膀或胸口有拉扯感就縮小幅度。",
     );
 
 

@@ -108,6 +108,48 @@ class ArmRaiseSignal(
 }
 
 /**
+ * 擴胸推掌：進度 = 左右手腕的水平間距相對站姿的增加量，以**校正時的肩寬**正規化。
+ *
+ * ### 為什麼量腕距，而不量「推掌」
+ * 單一前視角相機看不到深度。**向前推掌時手往鏡頭方向伸，2D 投影幾乎不動**，
+ * 根本量不到。可靠量到的只有「雙臂向兩側打開」那一半 —— 而那恰好就是擴胸本身。
+ * 收回（推掌）是這一下的返回階段：雙手在身前併攏時腕距比站姿更小，進度會變負，
+ * 自然滿足返回條件。
+ *
+ * ### 判準錨在使用者自己的解剖尺寸上
+ * 幾何最大間距 = 肩寬 + 2 × 手臂長（雙臂完全側平舉時的腕距），兩個量都在站姿校正時量到。
+ * [target] 取其 [Config.CHEST_EXPANSION_TARGET_FRACTION_OF_FULL]，所以 `p = 1.0`
+ * 代表「打開到自己最大側展幅度的六成」，而不是一個憑感覺訂的絕對距離。
+ *
+ * 與 [ArmRaiseSignal] 一樣用**校正時的**肩寬而非逐幀肩寬：使用者稍微側身時
+ * 逐幀肩寬會縮小，比值被放大、憑空多出達成率。
+ */
+class ChestExpansionSignal(
+    /** 校正時左右手腕的水平間距平均值（像素）。 */
+    private val restSeparation: Float,
+    /** 校正時的肩寬（像素）。 */
+    private val shoulderWidth: Float,
+    /** 校正時的手臂長，即站姿「手腕 Y − 肩 Y」（像素）。 */
+    private val armLength: Float,
+) : RepSignal {
+    override fun progress(points: Map<KeyPointType, KeyPoint>): Float? {
+        if (shoulderWidth <= 0f) return null
+        val left = points[KeyPointType.LEFT_WRIST] ?: return null
+        val right = points[KeyPointType.RIGHT_WRIST] ?: return null
+        return (kotlin.math.abs(left.x - right.x) - restSeparation) / shoulderWidth
+    }
+
+    /** 腕距達到「幾何最大側展幅度 × 設定比例」時的進度值。 */
+    override val target: Float =
+        ((shoulderWidth + 2f * armLength) * Config.CHEST_EXPANSION_TARGET_FRACTION_OF_FULL -
+            restSeparation) / shoulderWidth
+
+    override val enterThreshold = target * Config.CHEST_EXPANSION_ENTER_FRACTION
+    override val turnConfirmRise = target * Config.CHEST_EXPANSION_TURN_CONFIRM_FRACTION
+    override val returnThreshold = target * Config.CHEST_EXPANSION_RETURN_FRACTION
+}
+
+/**
  * 站姿校正累加器：每個動作宣告自己要從站姿量什麼，量滿後產生對應的 [RepSignal]。
  *
  * 不能統一累加髖/踝/肩/腕四組 —— 品質檢查只保證「當前動作宣告需要的點」到齊，
@@ -186,6 +228,42 @@ class ArmRaiseStandCalibrator : StandCalibrator {
     }
 }
 
+/** 擴胸推掌：量站姿腕距、肩寬，以及手臂長（判準要用它算幾何最大側展幅度）。 */
+class ChestExpansionStandCalibrator : StandCalibrator {
+    private var separationSum = 0f
+    private var widthSum = 0f
+    private var armSum = 0f
+    override var sampleCount = 0
+        private set
+
+    override fun accumulate(points: Map<KeyPointType, KeyPoint>): Boolean {
+        val leftShoulder = points[KeyPointType.LEFT_SHOULDER] ?: return false
+        val rightShoulder = points[KeyPointType.RIGHT_SHOULDER] ?: return false
+        val leftWrist = points[KeyPointType.LEFT_WRIST] ?: return false
+        val rightWrist = points[KeyPointType.RIGHT_WRIST] ?: return false
+        separationSum += kotlin.math.abs(leftWrist.x - rightWrist.x)
+        widthSum += kotlin.math.abs(leftShoulder.x - rightShoulder.x)
+        armSum += (leftWrist.y + rightWrist.y) / 2f - (leftShoulder.y + rightShoulder.y) / 2f
+        sampleCount += 1
+        return true
+    }
+
+    override fun build(): RepSignal? {
+        if (sampleCount == 0) return null
+        val separation = separationSum / sampleCount
+        val width = widthSum / sampleCount
+        val arm = armSum / sampleCount
+        // 站姿時手腕必須確實低於肩（arm > 0）；若使用者校正時就把手張開或舉著，
+        // 量到的站姿基準不可信，判準會變成 0 或負數，之後每一下的 p 都沒有意義。
+        if (width <= 0f || arm <= 0f) return null
+        val signal = ChestExpansionSignal(separation, width, arm)
+        // 站姿腕距已經超過判準腕距時 target 會是 0 或負數（例如校正時就把手張開），
+        // 那之後每一下的 p 都沒有意義。
+        if (signal.target <= 0f) return null
+        return signal
+    }
+}
+
 /**
  * 取得動作對應的站姿校正累加器。
  *
@@ -198,7 +276,8 @@ class ArmRaiseStandCalibrator : StandCalibrator {
 fun standCalibratorFor(exercise: ExerciseType): StandCalibrator? = when (exercise) {
     ExerciseType.SQUAT, ExerciseType.CHAIR_SQUAT -> LowerBodyStandCalibrator()
     ExerciseType.ARM_RAISE -> ArmRaiseStandCalibrator()
-    ExerciseType.HIGH_KNEES, ExerciseType.HEEL_RAISE, ExerciseType.CHEST_EXPANSION -> null
+    ExerciseType.CHEST_EXPANSION -> ChestExpansionStandCalibrator()
+    ExerciseType.HIGH_KNEES, ExerciseType.HEEL_RAISE -> null
 }
 
 internal fun averageY(
