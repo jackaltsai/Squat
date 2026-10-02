@@ -38,6 +38,10 @@ ARM_TO_SHOULDER_EXPECTED = 1.37
 ARM_TO_SHOULDER_TOLERANCE = 0.25
 CHEST_TARGET_FRACTION_OF_FULL = 0.6
 
+# 一場裡「正常」會出現幾個 Duser。原地高抬腿左右腳各一台狀態機、各自的判準，
+# 所以兩個值是正常的；其餘動作一場只校正一次，只該有一個。
+EXPECTED_DUSER_COUNT = {"HIGH_KNEES": 2}
+
 
 def arm_to_shoulder_ratio(exercise, duser):
     """從 duser 反推「手臂長 ÷ 肩寬」。無法反推時回傳 None。"""
@@ -174,7 +178,25 @@ def main():
         if has_raw and d["duser"].notna().any():
             du = d["duser"].dropna().unique()
             print(f"  Duser = {', '.join(f'{v:.4f}' for v in du)}")
-            exercise = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else "SQUAT"
+            raw = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else None
+            exercise = raw if isinstance(raw, str) else "SQUAT"
+            expected = EXPECTED_DUSER_COUNT.get(exercise, 1)
+            if exercise == "HIGH_KNEES" and len(du) == 2:
+                print("     （兩個 Duser 是左右腳各自的判準，不是兩場被合併）")
+            elif len(du) > expected:
+                # 不自動切場：高抬腿的兩個 Duser 會交替出現，「變了就切」會把它
+                # 切成一堆單下場次。改為指出可疑的邊界，讓人自己判斷。
+                print(f"  ⚠️  這一場出現 {len(du)} 個 Duser，{exercise} 每場只該有 "
+                      f"{expected} 個 —— 很可能是兩場訓練被合併")
+                ts = d["timestampMs"].to_numpy()
+                dus = d["duser"].to_numpy()
+                times = d["localTime"].to_numpy()
+                for i in range(1, len(dus)):
+                    if dus[i] != dus[i - 1]:
+                        gap = (ts[i] - ts[i - 1]) / 1000
+                        print(f"     邊界：{times[i - 1]} → {times[i]}"
+                              f"（間隔 {gap:.0f}s，未達切場門檻 "
+                              f"{SESSION_GAP_SECONDS}s）")
             if exercise in SQUAT_FAMILY:
                 if p.mean() > SUSPECT_MEAN_P_HIGH:
                     print(f"  ⚠️  平均 p={p.mean():.2f} 偏高 —— 兩下基準動作可能做得太淺，"
