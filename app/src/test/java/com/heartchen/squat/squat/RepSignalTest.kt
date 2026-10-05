@@ -941,4 +941,117 @@ class RepSignalTest {
             atCalibration, atDistance, 1e-2f
         )
     }
+
+    // ---- RepLedger：每一下的紀錄要配對到產生它的那一台狀態機 ----
+    //
+    // 原本整個畫面共用**一個**暫存格子。單一狀態機沒問題，但高抬腿左右腳各一台，
+    // 兩腳抬腿在時間上**幾乎同時**時就會互相蓋掉：
+    //   左腳 BOTTOM → 格子＝左　右腳 BOTTOM → 格子＝右（左被蓋掉）
+    //   左腳完成 → 存下「右腳的紀錄」並清空　右腳完成 → 格子已空，整筆遺失
+    // 畫面數字是對的，所以這個資料遺失完全看不出來。
+
+    /** 兩腳相位只差 4 幀（24 幀週期、各抬 12 幀）—— 幾乎同時抬起。 */
+    private fun nearSimultaneousLift(frame: Int, isLeft: Boolean): Float {
+        val period = 24
+        val liftFrames = 12
+        val x = ((frame - if (isLeft) 0 else 4) % period + period) % period
+        if (x >= liftFrames) return 0f
+        val peak = hkKneeY - hkHipY
+        return (kotlin.math.sin(kotlin.math.PI * x / liftFrames) * peak).toFloat()
+    }
+
+    @Test
+    fun `兩腳幾乎同時抬起時每一下都要有自己的紀錄`() {
+        val machines = hkSignals().map { SquatStateMachine(it) }
+        assertEquals(2, machines.size)
+        val ledger = RepLedger<String>()
+        val saved = mutableListOf<String>()
+        repeat(240) { frame ->
+            val before = machines.map { it.repCount }
+            machines.forEachIndexed { index, machine ->
+                val isLeft = index == 0
+                val state = machine.update(
+                    knees(
+                        leftLift = nearSimultaneousLift(frame, isLeft = true),
+                        rightLift = nearSimultaneousLift(frame, isLeft = false),
+                    )
+                )
+                if (state == SquatState.BOTTOM) {
+                    ledger.hold(machine, if (isLeft) "L" else "R")
+                }
+            }
+            saved += ledger.harvest(machines, before)
+        }
+        val counted = machines.sumOf { it.repCount }
+        assertEquals("這個節奏下應該兩腳各 10 下", 20, counted)
+        assertEquals("每完成一下都該有一筆紀錄，一筆都不能掉", counted, saved.size)
+        assertEquals("兩隻腳都該出現在紀錄裡", 10, saved.count { it == "L" })
+        assertEquals(10, saved.count { it == "R" })
+        assertEquals("全部收割完畢，不該有殘留", 0, ledger.heldCount)
+    }
+
+    @Test
+    fun `真正的交替踏步每一下也都要有自己的紀錄`() {
+        // 相位差半個週期（既有的 marchLift），這是原本那個 bug **不會**觸發的節奏 ——
+        // 所以它同時是「修正沒有改壞正常情況」的迴歸保護。
+        val machines = hkSignals().map { SquatStateMachine(it) }
+        val ledger = RepLedger<String>()
+        val saved = mutableListOf<String>()
+        repeat(240) { frame ->
+            val before = machines.map { it.repCount }
+            machines.forEachIndexed { index, machine ->
+                val state = machine.update(
+                    knees(
+                        leftLift = marchLift(frame, isLeft = true, amplitude = 1f),
+                        rightLift = marchLift(frame, isLeft = false, amplitude = 1f),
+                    )
+                )
+                if (state == SquatState.BOTTOM) {
+                    ledger.hold(machine, if (index == 0) "L" else "R")
+                }
+            }
+            saved += ledger.harvest(machines, before)
+        }
+        val counted = machines.sumOf { it.repCount }
+        assertTrue("交替踏步應該兩腳都計到不少下", counted > 10)
+        assertEquals("每完成一下都該有一筆紀錄", counted, saved.size)
+        assertTrue("兩隻腳都該出現", saved.contains("L") && saved.contains("R"))
+    }
+
+    @Test
+    fun `單一狀態機的配對行為不變`() {
+        // 深蹲家族只有一台狀態機，是已實機驗證的路徑，不可因為這個修正而改變。
+        val signal = heelRaiseSignal()
+        val machine = SquatStateMachine(signal)
+        val ledger = RepLedger<String>()
+        val saved = mutableListOf<String>()
+        val sequence = listOf(0f, 0.25f, 0.5f, 0.75f, 1.0f, 0.9f, 0.75f, 0.6f, 0.4f) +
+            List(8) { 0f }
+        repeat(3) {
+            sequence.forEach { fraction ->
+                val before = listOf(machine.repCount)
+                if (machine.update(heelRaiseFrame(fraction)) == SquatState.BOTTOM) {
+                    ledger.hold(machine, "one")
+                }
+                saved += ledger.harvest(listOf(machine), before)
+            }
+        }
+        assertEquals(3, machine.repCount)
+        assertEquals(3, saved.size)
+        assertEquals(0, ledger.heldCount)
+    }
+
+    @Test
+    fun `狀態機重建後舊的暫存不會被誤認`() {
+        // 暫存是以狀態機物件為鍵的；重建後舊鍵永遠比對不到，必須明確清空，
+        // 否則那筆會永遠留在記憶體裡（而且永遠不會被寫入）。
+        val machines = hkSignals().map { SquatStateMachine(it) }
+        val ledger = RepLedger<String>()
+        ledger.hold(machines[0], "stale")
+        assertEquals(1, ledger.heldCount)
+        ledger.clear()
+        assertEquals(0, ledger.heldCount)
+        // 清空後，沒有暫存的完成不會憑空產生紀錄
+        assertTrue(ledger.harvest(machines, machines.map { it.repCount - 1 }).isEmpty())
+    }
 }

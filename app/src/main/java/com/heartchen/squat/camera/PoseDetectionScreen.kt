@@ -61,6 +61,7 @@ import com.heartchen.squat.pose.passesQualityCheck
 import com.heartchen.squat.squat.DepthFeedback
 import com.heartchen.squat.squat.ExerciseType
 import com.heartchen.squat.squat.ExercisePicker
+import com.heartchen.squat.squat.RepLedger
 import com.heartchen.squat.squat.RepSignal
 import com.heartchen.squat.squat.StandCalibrator
 import com.heartchen.squat.squat.SquatState
@@ -160,22 +161,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     var repCount by remember { mutableIntStateOf(0) }
     var depthFeedback by remember { mutableStateOf<DepthFeedback?>(null) }
     var kneeValgusFlag by remember { mutableStateOf(false) }
-    var pendingRecord by remember { mutableStateOf<SquatRepRecord?>(null) }
-    var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
-    // 準備倒數目前要顯示的大字：「準備」→「3」→「2」→「1」→「開始！」，null 表示不在倒數。
-    var readyCountdownText by remember { mutableStateOf<String?>(null) }
-    var exportFiles by remember { mutableStateOf<List<File>>(emptyList()) }
-    var showStats by remember { mutableStateOf(false) }
-    var statsSummary by remember { mutableStateOf<TrainingSummary?>(null) }
-    // 骨架疊圖一律顯示（見下方 PoseOverlay），這個開關只控制信心值數字列表跟
-    // M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態），一般使用者不需要開啟。
-    var debugMode by remember { mutableStateOf(false) }
-    var frameLogger by remember { mutableStateOf<FrameLogger?>(null) }
-    // 每按一次「停止」就 +1，用來逼 DisposableEffect 重建一個新的逐幀檔。
-    // 研究模式開著就該**每一場**都錄到，不是只錄開關打開後的那一場（見 stopTraining）。
-    var frameLogSession by remember { mutableIntStateOf(0) }
-    // 這次停止時，逐幀檔實際錄到幾幀。0 = 這場沒有逐幀資料。
-    var exportFrameCount by remember { mutableIntStateOf(0) }
+    // 每一下的紀錄要配對到**產生它的那一台**狀態機，不能共用一個格子
+    // （高抬腿左右腳各一台，重疊時會互相蓋掉並靜默遺失一半紀錄）。
+    // 配對邏輯抽到 [RepLedger] 才測得到 —— 留在這個回呼裡純 JVM 測試碰不到。
+    val repLedger = remember { RepLedger<SquatRepRecord>() }
     var framingIssue by remember { mutableStateOf(FramingIssue.OK) }
 
     val database = remember { SquatDatabase.getInstance(context) }
@@ -307,6 +296,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             if (rebuilt.isNotEmpty()) {
                 repSignals = rebuilt
                 trainingMachines = rebuilt.map { SquatStateMachine(it) }
+                repLedger.clear()
             } else {
                 Log.w(
                     TAG,
@@ -553,6 +543,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                                     // 站姿校正本身就取得了分母，不需要兩下基準動作 ——
                                     // 也不該要求，對手臂動作而言「兩下基準深蹲」毫無意義。
                                     trainingMachines = signals.map { SquatStateMachine(it) }
+                                    repLedger.clear()
                                     flowStep = FlowStep.READY_COUNTDOWN
                                 }
                             }
@@ -592,6 +583,8 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                             duser = mean
                             calibrationWarning = null
                             trainingMachines = listOf(SquatStateMachine(signal))
+                            // 格子是以狀態機物件為鍵的，重建狀態機後舊鍵永遠不會再被比對到。
+                            repLedger.clear()
                             // 先進倒數而不是直接開始訓練，讓使用者知道從哪一下開始算數。
                             flowStep = FlowStep.READY_COUNTDOWN
                         }
@@ -601,19 +594,21 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 FlowStep.TRAINING -> {
                     val machines = trainingMachines
                     if (machines.isEmpty()) return@PoseAnalyzer
-                    val previousRepCount = machines.sumOf { it.repCount }
+                    // 推進前先記下每台各自的次數，才能知道是**哪一台**完成了一下。
+                    // 取總和會分不出來，於是無法把紀錄配對到正確的那一台。
+                    val repCountsBefore = machines.map { it.repCount }
                     // 每台狀態機各自推進。高抬腿是左右腳各一台，彼此不互相影響 ——
                     // 這正是「一下 = 單腳抬一次」能正確計數的原因。
-                    var bottomed: SquatStateMachine? = null
+                    // 同一幀可能有兩台同時 BOTTOM，所以收集**全部**而不是只留最後一台。
+                    val bottomedNow = mutableListOf<SquatStateMachine>()
                     machines.forEach { machine ->
                         if (machine.update(smoothedByType) == SquatState.BOTTOM) {
-                            bottomed = machine
+                            bottomedNow += machine
                         }
                     }
                     repCount = machines.sumOf { it.repCount }
                     stateForLog = machines.joinToString("/") { it.state.name }
-                    val triggered = bottomed
-                    if (triggered != null) {
+                    bottomedNow.forEach { triggered ->
                         val dNow = triggered.lastPeakProgress
                         // 深蹲家族用校正所得的 Duser，其餘動作用觸發那台狀態機自己的判準。
                         val dUser = duser ?: triggered.signal.target
@@ -629,7 +624,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                             val feedback = evaluateDepthFeedback(p, trainingMode)
                             depthFeedback = feedback
                             // dNow / dUser / valgusRatio 是門檻判定前的原始值，一併留存供 M5 重新掃描門檻。
-                            pendingRecord = SquatRepRecord(
+                            repLedger.hold(triggered, SquatRepRecord(
                                 timestamp = System.currentTimeMillis(),
                                 depthRatio = p,
                                 kneeValgus = kneeValgus == true,
@@ -639,20 +634,18 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                                 dNow = dNow,
                                 duser = dUser,
                                 kneeValgusRatio = valgusRatio
-                            )
+                            ))
                         }
                     }
                     // 計次在 UP → STAND 那一刻才 +1，此時才算這一下真正完成，寫入該次紀錄。
+                    val finished = repLedger.harvest(machines, repCountsBefore)
                     val currentRepCount = machines.sumOf { it.repCount }
-                    if (currentRepCount > previousRepCount) {
+                    if (finished.isNotEmpty()) {
                         textToSpeech.value?.speak(currentRepCount.toString(), TextToSpeech.QUEUE_ADD, null, null)
-                        pendingRecord?.let { record ->
-                            sessionRecords = sessionRecords + record
-                            coroutineScope.launch(Dispatchers.IO) {
-                                database.squatRepDao().insert(record)
-                            }
+                        sessionRecords = sessionRecords + finished
+                        coroutineScope.launch(Dispatchers.IO) {
+                            finished.forEach { database.squatRepDao().insert(it) }
                         }
-                        pendingRecord = null
                     }
                     Log.d(TAG, "state=$stateForLog count=$currentRepCount")
                 }
@@ -932,7 +925,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     exportFiles = emptyList()
                     exportFrameCount = 0
                     repCount = 0
-                    pendingRecord = null
+                    repLedger.clear()
                     trainingMachines = emptyList()
                     calibrationStateMachine = null
                     calibrationDepths = emptyList()
