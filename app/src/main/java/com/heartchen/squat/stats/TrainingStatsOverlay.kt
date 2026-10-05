@@ -1,237 +1,251 @@
 package com.heartchen.squat.stats
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Text
+import com.heartchen.squat.squat.ExerciseType
 
-private val CARD = Color(0xFF1B2A38)
-private val ACCENT = Color(0xFF1FC8A9)
-private val MUTED = Color(0xFF8FA6B6)
+private val SCRIM = Color(0xFF0B1B2B)
+private val MUTED = Color(0xFFB4C6D4)
 
-/** 圖表顯示的天數。14 天剛好涵蓋兩個完整週期，又不會讓每根柱子細到看不出來。 */
-const val STATS_CHART_DAYS = 14
+// 卡片底色與動作選擇格線完全一致 —— 使用者看到的是同一組圖、同一種卡片，
+// 只是上面多了一個數字。淺底的理由見 ExercisePicker：
+// 動作圖是白人偶配柔和投影，本來就是為淺底畫的。
+private val CARD = Color(0xFFFFFFFF)
+private val LABEL = Color(0xFF16232E)
+
+// 有做過 → 實色徽章；沒做過 → 淡色，但**仍然顯示 0**。
+// 把沒做的動作隱藏或留白，使用者會不知道那格是「沒做」還是「壞了」。
+private val BADGE_DONE = Color(0xFF00695C)
+private val BADGE_NONE = Color(0xFFDCE4EA)
+private val BADGE_DONE_TEXT = Color.White
+private val BADGE_NONE_TEXT = Color(0xFF7A8A96)
 
 /**
- * 訓練統計：今日／本週／本月的次數、最近 14 天長條圖、每日明細。
+ * 訓練統計（M9 重新設計，長者取向）。
  *
- * 資料全部來自裝置本機的 Room 資料庫，不需要網路。
+ * **只有六張動作圖，每張圖裡顯示那個動作當天做了幾下。** 其他全部移除。
+ *
+ * M6 的版本是「今日／本週／本月三個大數字 + 最近 14 天長條圖 + 每日明細」。
+ * 對長者而言那是三種不同的時間尺度加一張要解讀的圖表 ——
+ * 而他真正想知道的只有一件事：**今天這個動作做了幾下**。
+ *
+ * 設計上刻意與動作選擇格線**用同一組圖、同一種卡片**：
+ * 使用者不需要再學一套新的視覺語言，一眼就知道哪一格對應哪個動作。
+ *
+ * 日期可以往前翻（`‹` / `›`），因為「每日」若只能看今天就答不出「昨天做了多少」。
+ * 翻到今天就不能再往後 —— 未來的日期沒有意義，按鈕會變淡且不可按。
  */
 @Composable
 fun TrainingStatsOverlay(
-    summary: TrainingSummary?,
+    counts: DailyExerciseCounts?,
+    isToday: Boolean,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            // 完全不透明：這是一個全螢幕頁面，不是疊在相機上的提示。
-            // 留 3% 透明度並不會產生層次感，只會讓後面的「選擇訓練模式」、除錯模式開關
-            // 與框位警告透出來變成雜訊。
-            .background(Color(0xFF0B1B2B))
-            // 擋掉點擊，避免點統計頁時誤觸到後面的相機 UI
-            .clickable(enabled = false) {}
+            .background(SCRIM.copy(alpha = 0.97f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("訓練統計", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    text = "關閉",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                        .clickable { onClose() }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-            if (summary == null) {
-                Text("讀取中…", color = MUTED, fontSize = 16.sp)
-                return@Column
-            }
-
-            if (summary.totalReps == 0) {
-                Text(
-                    text = "還沒有任何訓練紀錄。\n完成一組深蹲後，這裡就會開始累積。",
-                    color = MUTED,
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(top = 24.dp)
-                )
-                return@Column
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SummaryCard("今日", summary.todayReps, Modifier.weight(1f), highlight = true)
-                SummaryCard("本週", summary.weekReps, Modifier.weight(1f))
-                SummaryCard("本月", summary.monthReps, Modifier.weight(1f))
-            }
-
-            Text(
-                text = "累計 ${summary.totalReps} 下　最近 $STATS_CHART_DAYS 天有 ${summary.activeDays} 天有訓練",
-                color = MUTED,
-                fontSize = 14.sp
+            DayHeader(
+                counts = counts,
+                isToday = isToday,
+                onPreviousDay = onPreviousDay,
+                onNextDay = onNextDay
             )
 
-            SectionTitle("最近 $STATS_CHART_DAYS 天")
-            DailyBarChart(summary.days)
-
-            SectionTitle("每日明細")
-            val activeDays = summary.days.filter { it.reps > 0 }.reversed()
-            if (activeDays.isEmpty()) {
-                Text("最近 $STATS_CHART_DAYS 天沒有訓練紀錄", color = MUTED, fontSize = 14.sp)
+            if (counts == null) {
+                Text("讀取中…", color = MUTED, fontSize = 20.sp)
             } else {
-                activeDays.forEach { DayRow(it) }
+                // 格線順序與動作選擇畫面相同，位置才會對得上。
+                ExerciseType.GRID_ORDER.chunked(2).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        row.forEach { type ->
+                            ExerciseCountCard(
+                                type = type,
+                                reps = counts.repsOf(type),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (row.size == 1) Box(Modifier.weight(1f))
+                    }
+                }
+
+                Text(
+                    text = if (counts.totalReps > 0) {
+                        "這天總共 ${counts.totalReps} 下"
+                    } else {
+                        "這天還沒有訓練紀錄"
+                    },
+                    color = MUTED,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                )
             }
 
             Text(
-                text = "統計資料僅儲存於本機，不會上傳。",
-                color = MUTED,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 8.dp)
+                text = "關閉",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .background(Color(0xFF37474F), RoundedCornerShape(14.dp))
+                    .clickable { onClose() }
+                    .padding(vertical = 18.dp)
             )
         }
     }
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+private fun DayHeader(
+    counts: DailyExerciseCounts?,
+    isToday: Boolean,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        DayArrow(text = "‹", enabled = true, onClick = onPreviousDay)
+        Text(
+            text = dayHeading(counts, isToday),
+            color = Color.White,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f)
+        )
+        // 今天之後沒有紀錄可看，按鈕變淡且不可按 —— 比按了沒反應誠實。
+        DayArrow(text = "›", enabled = !isToday, onClick = onNextDay)
+    }
 }
 
+/** 箭頭的點擊範圍刻意開大（長者的手指與視力都需要），字級也比一般按鈕大。 */
 @Composable
-private fun SummaryCard(label: String, reps: Int, modifier: Modifier = Modifier, highlight: Boolean = false) {
-    Column(
-        modifier = modifier
-            .background(if (highlight) ACCENT.copy(alpha = 0.18f) else CARD, RoundedCornerShape(14.dp))
-            .padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(label, color = MUTED, fontSize = 14.sp)
-        Text(
-            text = reps.toString(),
-            color = if (highlight) ACCENT else Color.White,
-            fontSize = 34.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text("下", color = MUTED, fontSize = 12.sp)
-    }
+private fun DayArrow(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        text = text,
+        color = if (enabled) Color.White else Color(0xFF3C4F60),
+        fontSize = 34.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .background(
+                if (enabled) Color(0xFF1B3346) else Color(0xFF13222F),
+                RoundedCornerShape(12.dp)
+            )
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 18.dp, vertical = 10.dp)
+    )
+}
+
+private fun dayHeading(counts: DailyExerciseCounts?, isToday: Boolean): String {
+    if (counts == null) return "訓練紀錄"
+    val date = DateBuckets.dayLabel(counts.dayStartMillis)
+    val weekday = DateBuckets.weekdayLabel(counts.dayStartMillis)
+    return if (isToday) "今天 $date（$weekday）" else "$date（$weekday）"
 }
 
 /**
- * 每日次數長條圖。
+ * 一張動作卡：圖片 + **疊在圖片裡**的次數徽章 + 動作名稱。
  *
- * 柱高以「這段期間的單日最高次數」為滿格，而不是固定上限 —— 每個人的訓練量差距很大，
- * 固定上限會讓量少的人整排看起來都是貼地的短柱，看不出相對變化。
+ * 徽章放在圖片下緣中央（人偶的腳的位置），而不是正中央 ——
+ * 正中央會蓋掉動作本身最好認的部分（軀幹與手臂的姿勢）。
  */
 @Composable
-private fun DailyBarChart(days: List<DayBucket>) {
-    val maxReps = days.maxOfOrNull { it.reps } ?: 0
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(CARD, RoundedCornerShape(14.dp))
+private fun ExerciseCountCard(
+    type: ExerciseType,
+    reps: Int,
+    modifier: Modifier = Modifier
+) {
+    val done = reps > 0
+    Column(
+        modifier = modifier
+            .background(CARD, RoundedCornerShape(18.dp))
             .padding(horizontal = 10.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.Bottom
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        days.forEach { day ->
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Image(
+                painter = painterResource(type.iconRes),
+                contentDescription = type.label,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.05f)
+            )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        if (done) BADGE_DONE else BADGE_NONE,
+                        RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
                 Text(
-                    text = if (day.reps > 0) day.reps.toString() else "",
-                    color = MUTED,
-                    fontSize = 10.sp
+                    text = reps.toString(),
+                    color = if (done) BADGE_DONE_TEXT else BADGE_NONE_TEXT,
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    // 沒訓練的日子畫一條極細的底線，留一個看得見的空格才能區分
-                    // 「連續練了三天」與「三天裡只練了一天」。
-                    val fraction = if (maxReps > 0) day.reps.toFloat() / maxReps else 0f
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(fraction.coerceAtLeast(0.02f))
-                            .background(
-                                if (day.reps > 0) ACCENT else Color.White.copy(alpha = 0.10f),
-                                RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                            )
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(DateBuckets.weekdayLabel(day.startMillis), color = MUTED, fontSize = 11.sp)
+                Text(
+                    text = "下",
+                    color = if (done) BADGE_DONE_TEXT else BADGE_NONE_TEXT,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(start = 3.dp, bottom = 6.dp)
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun DayRow(day: DayBucket) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(CARD, RoundedCornerShape(10.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
         Text(
-            text = "${DateBuckets.dayLabel(day.startMillis)}（${DateBuckets.weekdayLabel(day.startMillis)}）",
-            color = Color.White,
-            fontSize = 15.sp,
-            modifier = Modifier.width(96.dp)
-        )
-        Text(
-            text = "${day.reps} 下",
-            color = ACCENT,
-            fontSize = 15.sp,
+            text = type.label,
+            color = LABEL,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(70.dp)
-        )
-        Text(
-            text = "達標 ${day.greenRatio}%",
-            color = MUTED,
-            fontSize = 14.sp,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp)
         )
     }
 }

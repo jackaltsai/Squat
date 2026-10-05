@@ -34,6 +34,18 @@ interface SquatRepDao {
     @Query("SELECT * FROM squat_rep_records WHERE timestamp >= :from ORDER BY timestamp ASC")
     suspend fun recordsSince(from: Long): List<SquatRepRecord>
 
+    /**
+     * 取某一天的紀錄，供統計頁按動作分組。
+     *
+     * 與 [recordsSince] 分開是因為統計頁可以往前翻日期：用 `recordsSince(那天午夜)`
+     * 會把那天之後的全部都讀進來，翻到很久以前時等於每次都讀整個資料庫。
+     *
+     * 分組一樣在 Kotlin 端做（理由見 [recordsSince]：SQL 的 strftime 用的是
+     * 查詢當下的裝置時區，與 Kotlin 算出的日界線會對不起來）。
+     */
+    @Query("SELECT * FROM squat_rep_records WHERE timestamp >= :from AND timestamp < :to ORDER BY timestamp ASC")
+    suspend fun recordsBetween(from: Long, to: Long): List<SquatRepRecord>
+
     @Query("SELECT COUNT(*) FROM squat_rep_records WHERE timestamp >= :from AND timestamp < :to")
     suspend fun countBetween(from: Long, to: Long): Int
 

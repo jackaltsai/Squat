@@ -1,7 +1,7 @@
 package com.heartchen.squat.stats
 
 import com.heartchen.squat.data.SquatRepRecord
-import com.heartchen.squat.squat.DepthFeedback
+import com.heartchen.squat.squat.ExerciseType
 import java.util.Calendar
 
 /**
@@ -15,10 +15,12 @@ import java.util.Calendar
 object DateBuckets {
 
     /**
-     * 一週從星期一算起。
+     * `firstDayOfWeek` 明確指定為星期一，不吃 locale 預設值
+     * （zh-TW 的 Calendar 預設是星期日）。
      *
-     * zh-TW locale 的 Calendar 預設 firstDayOfWeek 是星期日，跟一般人講「這週」的
-     * 理解（週一到週日）不一致，所以明確指定，不吃 locale 預設值。
+     * ⚠️ M9 之後 `startOfWeek` / `startOfMonth` 已刪除（統計頁只看單日），
+     * 所以目前這個設定只影響 [weekdayLabel]。保留明確設定是為了日後若再加回
+     * 週/月檢視時不會突然換一套週界線定義。
      */
     private fun calendar(millis: Long): Calendar = Calendar.getInstance().apply {
         firstDayOfWeek = Calendar.MONDAY
@@ -33,14 +35,6 @@ object DateBuckets {
     }
 
     fun startOfDay(millis: Long): Long = calendar(millis).atMidnight().timeInMillis
-
-    fun startOfWeek(millis: Long): Long = calendar(millis).atMidnight().apply {
-        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-    }.timeInMillis
-
-    fun startOfMonth(millis: Long): Long = calendar(millis).atMidnight().apply {
-        set(Calendar.DAY_OF_MONTH, 1)
-    }.timeInMillis
 
     /** 用 Calendar 加天數而不是加 86400000 毫秒，才能正確處理日光節約時間造成的 23/25 小時日。 */
     fun addDays(millis: Long, days: Int): Long =
@@ -63,46 +57,45 @@ object DateBuckets {
     }
 }
 
-/** 一天的彙總。[reps] 為 0 代表當天沒訓練，圖表仍要畫出這一格才看得出中斷。 */
-data class DayBucket(
-    val startMillis: Long,
-    val reps: Int,
-    val greenReps: Int,
-    val valgusReps: Int
+/**
+ * 某一天、每個動作各做了幾下。
+ *
+ * M9 把統計頁改成「六張動作圖 + 圖裡的當日次數」之後，頁面只需要這一個量。
+ * 原本的 `TrainingSummary` / `DayBucket` / `buildDailyBuckets`（今日/本週/本月
+ * 三個大數字 + 14 天長條圖 + 每日明細）**已刪除** —— 它們算出的達標率與膝內夾比例
+ * 在新版頁面上沒有任何地方顯示，留著就是又一個「宣告了但沒人讀取」
+ * （這個專案已經因為這個模式故障過五次）。要回頭看歷史版本請查 git。
+ *
+ * 分組一律在 Kotlin 端做，不用 SQL 的 strftime —— 理由見 [SquatRepDao.recordsSince]。
+ */
+data class DailyExerciseCounts(
+    /** 這一天的午夜（本地時區），由 [DateBuckets.startOfDay] 算出。 */
+    val dayStartMillis: Long,
+    /** 只放**當天真的有紀錄**的動作；沒做的動作不會出現在這個 map 裡。 */
+    val perExercise: Map<ExerciseType, Int>,
 ) {
-    val greenRatio: Int get() = if (reps > 0) greenReps * 100 / reps else 0
-}
+    /** 沒做過的動作回傳 0，而不是 null —— 畫面要顯示「0 下」而不是空白。 */
+    fun repsOf(type: ExerciseType): Int = perExercise[type] ?: 0
 
-data class TrainingSummary(
-    val todayReps: Int,
-    val weekReps: Int,
-    val monthReps: Int,
-    val totalReps: Int,
-    val days: List<DayBucket>
-) {
-    val bestDayReps: Int get() = days.maxOfOrNull { it.reps } ?: 0
-    val activeDays: Int get() = days.count { it.reps > 0 }
+    val totalReps: Int get() = perExercise.values.sum()
+
+    /** 當天有做過的動作種類數。 */
+    val activeExercises: Int get() = perExercise.count { it.value > 0 }
 }
 
 /**
- * 把紀錄分成最近 [dayCount] 天的每日桶，沒訓練的日子也會產生一個 reps = 0 的桶
- * （少了空白格，圖表會把「連續三天」和「三天裡只練一天」畫成一樣）。
+ * 把一批紀錄按動作分組，數出 [dayStartMillis] 那一天各做了幾下。
+ *
+ * 會**過濾掉不屬於那一天**的紀錄：呼叫端若用寬一點的區間查詢（或日界線的定義
+ * 與查詢條件有出入），不過濾就會把隔天的次數算進來。
  */
-fun buildDailyBuckets(
+fun buildDailyExerciseCounts(
     records: List<SquatRepRecord>,
-    dayCount: Int,
-    now: Long = System.currentTimeMillis()
-): List<DayBucket> {
-    val today = DateBuckets.startOfDay(now)
-    val starts = (dayCount - 1 downTo 0).map { DateBuckets.addDays(today, -it) }
-    val byDay = records.groupBy { DateBuckets.startOfDay(it.timestamp) }
-    return starts.map { start ->
-        val dayRecords = byDay[start].orEmpty()
-        DayBucket(
-            startMillis = start,
-            reps = dayRecords.size,
-            greenReps = dayRecords.count { it.feedbackColor == DepthFeedback.GREEN },
-            valgusReps = dayRecords.count { it.kneeValgus }
-        )
-    }
+    dayStartMillis: Long,
+): DailyExerciseCounts {
+    val counts = records
+        .filter { DateBuckets.startOfDay(it.timestamp) == dayStartMillis }
+        .groupingBy { it.exerciseType }
+        .eachCount()
+    return DailyExerciseCounts(dayStartMillis, counts)
 }
