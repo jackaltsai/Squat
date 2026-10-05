@@ -2,6 +2,7 @@ package com.heartchen.squat.pose
 
 import com.heartchen.squat.squat.ExerciseType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -186,10 +187,16 @@ class FramingGuidanceTest {
             KeyPoint(KeyPointType.LEFT_WRIST, 290f, 5f, 0.1f),
             KeyPoint(KeyPointType.RIGHT_WRIST, 430f, 5f, 0.1f),
         )
-        assertEquals(
-            FramingIssue.MISSING_WRIST,
-            evaluateFraming(lowConfidenceWrists, ExerciseType.ARM_RAISE)
+        val issue = evaluateFraming(lowConfidenceWrists, ExerciseType.ARM_RAISE)
+        // 這條測試的重點是**不可以**拿那個亂猜的 y=5 去判「手舉出畫面上緣」。
+        // 2026-10-05 我一度改成讀原始座標來分辨「舉太高」與「站太遠」，
+        // 這條就立刻紅了 —— 而它是對的：低信心值的座標本身就不能當依據。
+        assertTrue(
+            "不可因為亂猜的座標報 WRIST_NEAR_TOP_EDGE，實際得到 $issue",
+            issue != FramingIssue.WRIST_NEAR_TOP_EDGE
         )
+        // 手腕關鍵點存在、只是追不準 → 站近一點才會準。
+        assertEquals(FramingIssue.TOO_FAR, issue)
     }
 
     @Test
@@ -289,18 +296,18 @@ class FramingGuidanceTest {
     }
 
     @Test
-    fun `手腕舉出畫面上緣且信心值不足時仍說舉到肩膀就好`() {
+    fun `舉出畫面上緣只有在手腕信心值足夠時才判定`() {
         val cx = width / 2f
-        val overhead = frame(
+        // 信心值足夠：座標可信，y=40（畫面 3%）就是真的舉出去了
+        val trusted = frame(
             kp(KeyPointType.LEFT_SHOULDER, cx - 70f, 400f),
             kp(KeyPointType.RIGHT_SHOULDER, cx + 70f, 400f),
-            // 原始座標已經貼在畫面上緣（<6%）—— 這是舉太高，不是站太遠
-            KeyPoint(KeyPointType.LEFT_WRIST, cx - 70f, 40f, 0.2f),
-            KeyPoint(KeyPointType.RIGHT_WRIST, cx + 70f, 40f, 0.2f),
+            kp(KeyPointType.LEFT_WRIST, cx - 70f, 40f),
+            kp(KeyPointType.RIGHT_WRIST, cx + 70f, 40f),
         )
         assertEquals(
             FramingIssue.WRIST_NEAR_TOP_EDGE,
-            evaluateFraming(overhead, ExerciseType.ARM_RAISE)
+            evaluateFraming(trusted, ExerciseType.ARM_RAISE)
         )
     }
 
@@ -314,21 +321,6 @@ class FramingGuidanceTest {
         assertEquals(
             FramingIssue.MISSING_WRIST,
             evaluateFraming(noWrist, ExerciseType.ARM_RAISE)
-        )
-    }
-
-    @Test
-    fun `腳踝在畫面裡但信心值不足時請使用者往前站`() {
-        val far = frame(
-            kp(KeyPointType.LEFT_HIP, 320f, 600f),
-            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
-            // 腳踝在畫面 90% 處（沒有被下緣裁掉），只是信心值不足
-            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 1150f, 0.2f),
-            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 1150f, 0.2f),
-        )
-        assertEquals(
-            FramingIssue.TOO_FAR,
-            evaluateFraming(far, ExerciseType.SQUAT)
         )
     }
 

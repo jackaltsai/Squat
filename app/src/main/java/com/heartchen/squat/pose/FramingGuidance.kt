@@ -77,12 +77,15 @@ private fun evaluateLowerBodyFraming(
 ): FramingIssue {
     val hipY = averageY(byType, KeyPointType.LEFT_HIP, KeyPointType.RIGHT_HIP)
         ?: return FramingIssue.NO_POSE
+    // 腳踝不可信時維持原本的 MISSING_ANKLE（訊息是「請往後站一點」）。
+    // 手腕那條路改了方向（見 missingWristAdvice），但下肢**沒有任何實測證據**
+    // 說它有問題，而深蹲家族已經驗證數週 —— 不動已驗證的東西。
+    // 下肢的主因也不同：腳踝不可信通常是被下緣裁掉（站太近），方向正好相反。
+    val ankleY = averageY(byType, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
+        ?: return FramingIssue.MISSING_ANKLE
 
     val heightPx = frame.imageHeight.toFloat()
     if (heightPx <= 0f) return FramingIssue.OK
-
-    val ankleY = averageY(byType, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
-        ?: return missingAnkleAdvice(frame, heightPx)
 
     if (ankleY / heightPx > Config.FRAMING_ANKLE_NEAR_EDGE_RATIO) {
         return FramingIssue.MISSING_ANKLE
@@ -126,7 +129,7 @@ private fun evaluateUpperBodyFraming(
     if (heightPx <= 0f || widthPx <= 0f) return FramingIssue.OK
 
     val wristY = averageY(byType, KeyPointType.LEFT_WRIST, KeyPointType.RIGHT_WRIST)
-        ?: return missingWristAdvice(frame, heightPx)
+        ?: return missingWristAdvice(frame)
 
     if (wristY / heightPx < Config.FRAMING_WRIST_NEAR_TOP_RATIO) {
         return FramingIssue.WRIST_NEAR_TOP_EDGE
@@ -141,48 +144,30 @@ private fun evaluateUpperBodyFraming(
 }
 
 /**
- * 必要關鍵點**在畫面裡但信心值不足**時該給什麼建議。
+ * 手腕**存在但信心值不足**時該給什麼建議。
  *
- * 這是兩種完全不同的狀況，而原本的程式碼把它們混成同一句話：
+ * 2026-10-05 實機：雙臂高舉站太遠，手腕信心值掉到門檻下，使用者得到
+ * 「請讓雙手入鏡」—— 手明明在畫面裡，建議的方向還是錯的。正確動作是往前站。
  *
- * | 原始座標在哪 | 真正的問題 | 該說 |
- * |---|---|---|
- * | 超出畫面邊緣 | 動作做得太大／站太近 | 舉到肩膀就好／請往後站 |
- * | **在畫面裡** | ML Kit 追不準，通常是人太小 | **請往前站** |
+ * ⚠️ 我第一版是**讀原始座標**來分辨「舉出畫面上緣」與「站太遠」。
+ * `FramingGuidanceTest` 的「低信心值的關鍵點不列入框位判斷」立刻把它打下來，
+ * 而且打得對：**低信心值的座標就是亂猜的**，拿它當判斷依據不成立 ——
+ * 2026-10-01 整場只聽得到「舉到肩膀就好」就是這麼來的。
  *
- * 2026-10-05 實機：雙臂高舉站太遠，手腕信心值掉到門檻下，
- * 使用者得到的是「請讓雙手入鏡」—— 手明明在畫面裡，建議的方向還是錯的。
+ * 所以這裡**只看點存不存在**，不看它在哪：
  *
- * 用**原始座標**（ML Kit 偵測到人就會給全部 33 點，不管看不看得到）分辨這兩種，
- * 不需要新的門檻 —— 邊緣判定沿用既有的
- * [Config.FRAMING_WRIST_NEAR_TOP_RATIO] / [Config.FRAMING_ANKLE_NEAR_EDGE_RATIO]。
- * 「站近一點」對信心值永遠是有效的動作，所以在畫面裡卻追不準時一律這樣說。
+ * | 狀況 | 說 |
+ * |---|---|
+ * | 有手腕關鍵點但信心值不足 | **請往前站**（站近一點是唯一對信心值有效的動作） |
+ * | 連手腕關鍵點都沒有 | 請讓雙手入鏡 |
+ *
+ * 「舉出畫面上緣」仍然由 [FramingIssue.WRIST_NEAR_TOP_EDGE] 負責 ——
+ * 走的是**信心值足夠**那條路，座標可信才拿來比對邊緣。
  */
-private fun missingWristAdvice(frame: PoseFrame, heightPx: Float): FramingIssue {
-    val rawWristY = averageY(
-        frame.keyPoints.associateBy { it.type },
-        KeyPointType.LEFT_WRIST,
-        KeyPointType.RIGHT_WRIST
-    ) ?: return FramingIssue.MISSING_WRIST   // 連座標都沒有 → 真的沒偵測到手
-    return if (rawWristY / heightPx < Config.FRAMING_WRIST_NEAR_TOP_RATIO) {
-        FramingIssue.WRIST_NEAR_TOP_EDGE
-    } else {
-        FramingIssue.TOO_FAR
-    }
-}
-
-/** 腳踝版本，見 [missingWristAdvice]。腳踝的邊緣在**下方**，超出代表站太近。 */
-private fun missingAnkleAdvice(frame: PoseFrame, heightPx: Float): FramingIssue {
-    val rawAnkleY = averageY(
-        frame.keyPoints.associateBy { it.type },
-        KeyPointType.LEFT_ANKLE,
-        KeyPointType.RIGHT_ANKLE
-    ) ?: return FramingIssue.MISSING_ANKLE
-    return if (rawAnkleY / heightPx > Config.FRAMING_ANKLE_NEAR_EDGE_RATIO) {
-        FramingIssue.MISSING_ANKLE          // 腳踝被下緣裁掉 → 請往後站
-    } else {
-        FramingIssue.TOO_FAR
-    }
+private fun missingWristAdvice(frame: PoseFrame): FramingIssue {
+    val raw = frame.keyPoints.associateBy { it.type }
+    val hasWrist = KeyPointType.LEFT_WRIST in raw || KeyPointType.RIGHT_WRIST in raw
+    return if (hasWrist) FramingIssue.TOO_FAR else FramingIssue.MISSING_WRIST
 }
 
 private fun averageY(
