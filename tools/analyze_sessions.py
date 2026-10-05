@@ -198,7 +198,39 @@ def collect(paths):
         frames.append(df)
     if not frames:
         sys.exit("找不到任何 CSV")
-    return pd.concat(frames, ignore_index=True)
+    return dedupe(pd.concat(frames, ignore_index=True))
+
+
+def dedupe(df):
+    """同一下只留一筆。
+
+    「匯出全部歷史紀錄」是從資料庫整份倒出來的，所以它**包含**每一場的
+    session CSV；而使用者的下載資料夾會同時累積好幾份 all-records
+    加上一堆單場 CSV。不去重的話每一場會被報 2~3 次 ——
+    實測 43 場真實訓練印出 70+ 行摘要，真正要看的東西被埋掉。
+
+    `timestampMs` 是每一下寫入時的毫秒時間戳，實測 456 筆**零重複**，
+    可以當唯一鍵。同一下出現在多個檔案時，留**欄位最完整**的那一筆：
+    舊格式的 all-records 沒有 `exerciseType` / `duser`，
+    留到它就等於把新格式的診斷資訊丟掉。
+    """
+    if "timestampMs" not in df.columns:
+        return df
+    before = len(df)
+    df = df.assign(_fields=df.notna().sum(axis=1))
+    df = (
+        df.sort_values(["timestampMs", "_fields"], ascending=[True, False])
+        .drop_duplicates(subset="timestampMs", keep="first")
+        .drop(columns="_fields")
+        .reset_index(drop=True)
+    )
+    dropped = before - len(df)
+    if dropped:
+        print(f"去重：{before} 筆 → {len(df)} 筆（移除 {dropped} 筆重複）")
+        print("  （「匯出全部歷史紀錄」包含每一場的 session CSV，所以同一下會出現多次；")
+        print("   同一下保留欄位最完整的那一筆，舊格式缺 exerciseType/duser 的會被蓋掉）")
+        print()
+    return df
 
 
 def main():
