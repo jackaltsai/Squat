@@ -165,6 +165,21 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // （高抬腿左右腳各一台，重疊時會互相蓋掉並靜默遺失一半紀錄）。
     // 配對邏輯抽到 [RepLedger] 才測得到 —— 留在這個回呼裡純 JVM 測試碰不到。
     val repLedger = remember { RepLedger<SquatRepRecord>() }
+    var sessionRecords by remember { mutableStateOf<List<SquatRepRecord>>(emptyList()) }
+    // 準備倒數目前要顯示的大字：「準備」→「3」→「2」→「1」→「開始！」，null 表示不在倒數。
+    var readyCountdownText by remember { mutableStateOf<String?>(null) }
+    var exportFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    var showStats by remember { mutableStateOf(false) }
+    var statsSummary by remember { mutableStateOf<TrainingSummary?>(null) }
+    // 骨架疊圖一律顯示（見下方 PoseOverlay），這個開關只控制信心值數字列表跟
+    // M4 研究模式的每幀 CSV 紀錄（原始座標 + EMA 平滑座標 + 狀態機狀態），一般使用者不需要開啟。
+    var debugMode by remember { mutableStateOf(false) }
+    var frameLogger by remember { mutableStateOf<FrameLogger?>(null) }
+    // 每按一次「停止」就 +1，用來逼 DisposableEffect 重建一個新的逐幀檔。
+    // 研究模式開著就該**每一場**都錄到，不是只錄開關打開後的那一場（見 stopTraining）。
+    var frameLogSession by remember { mutableIntStateOf(0) }
+    // 這次停止時，逐幀檔實際錄到幾幀。0 = 這場沒有逐幀資料。
+    var exportFrameCount by remember { mutableIntStateOf(0) }
     var framingIssue by remember { mutableStateOf(FramingIssue.OK) }
 
     val database = remember { SquatDatabase.getInstance(context) }

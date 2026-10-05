@@ -1400,6 +1400,37 @@ safetyNote（16sp）
 影響，而那**不是演算法誤差也不是受試者差異，是介面誘導**。
 這也是為什麼「操作程序」不能只寫在紙上 —— 要寫進畫面。
 
+### 💥 我自己弄壞了編譯：用索引區間切原始碼，把中間的宣告全刪了
+
+抽 `RepLedger` 那次改動我用的是：
+
+```python
+start = s.index("    // 每台狀態機各自一個「待寫紀錄」格子…")
+end   = s.index("    var framingIssue by remember")
+s = s[:start] + new_block + s[end:]
+```
+
+那兩個標記之間除了要換掉的 `pendingRecord`，還有**另外十個宣告**
+（`sessionRecords` / `readyCountdownText` / `exportFiles` / `showStats` /
+`statsSummary` / `debugMode` / `frameLogger` / `frameLogSession` /
+`exportFrameCount`）。全部被刪掉，`./gradlew test` 噴出 **70 多個
+Unresolved reference**。
+
+#### 兩個教訓
+1. **不要用索引區間切原始碼。** 以精確字串 `replace` 並 `assert count == 1`，
+   刪除範圍才等於我以為的範圍。要刪一段就把整段原文寫進 `old`。
+2. **我的驗證方式也錯了。** 我跑 `git diff aac09cf..HEAD` 來確認差異，
+   但那比的是**兩個 commit**，看不到工作區未提交的修復 ——
+   難怪它一直顯示那些宣告是被刪掉的。改用 `git diff <base> -- <file>`
+   （不帶第二個 revision）才會把工作區算進來。
+
+修法是從上一個 commit 把那十個宣告原樣補回去，並用
+`git diff aac09cf -- <file>` 確認差異**只剩 `RepLedger` 相關**，
+以及逐一檢查十二個宣告都存在。
+
+⚠️ 括號/大括號平衡檢查**抓不到這種錯** —— 刪掉的是完整的宣告行，括號本來就配對。
+這也是為什麼它一路通過我的靜態檢查，直到真正的 Kotlin 編譯器出手。
+
 ### 🔁 今天重複踩到的同一個錯誤（值得單獨記住）
 
 **「宣告了但沒有人讀取」在一天之內出現五次**，每一次都造成實際故障：
