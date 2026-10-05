@@ -241,9 +241,13 @@ class FramingGuidanceTest {
                     kp(KeyPointType.LEFT_HIP, 320f, 600f),
                     kp(KeyPointType.RIGHT_HIP, 400f, 600f),
                 )
+                // 缺腳踝只對**宣告需要腳踝**的動作才算問題。
+                // 高抬腿與踮腳尖刻意不宣告腳踝，拿它報「請往後站一點」是錯的指示
+                // （2026-10-05 實機被念了 1.8 秒，而站位完全正確）。
+                val declaresAnkle = KeyPointType.LEFT_ANKLE in exercise.requiredPoints
                 assertEquals(
-                    "${exercise.name} 缺腳踝應提示 MISSING_ANKLE",
-                    FramingIssue.MISSING_ANKLE,
+                    "${exercise.name} 缺腳踝時的判定不對",
+                    if (declaresAnkle) FramingIssue.MISSING_ANKLE else FramingIssue.OK,
                     evaluateFraming(noAnkles, exercise)
                 )
             }
@@ -321,6 +325,39 @@ class FramingGuidanceTest {
         assertEquals(
             FramingIssue.MISSING_WRIST,
             evaluateFraming(noWrist, ExerciseType.ARM_RAISE)
+        )
+    }
+
+    /**
+     * 原地高抬腿刻意不宣告腳踝（抬起那腳的踝必然掉信心值）。
+     * 但框位檢查仍拿腳踝報問題：2026-10-05 的逐幀資料裡，訓練中有 **39 連續幀**
+     * 報 `MISSING_ANKLE`（門檻只要 8 幀），使用者被念了約 1.8 秒的
+     * 「請往後站一點」—— 而他站的位置完全正確。
+     *
+     * 與雙臂高舉那個「請讓雙手入鏡」同一類：拿一個這個動作根本不需要的關鍵點，
+     * 去報一個不存在的問題。
+     */
+    @Test
+    fun `高抬腿的腳踝不可信時不該報請往後站`() {
+        val liftedFoot = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            kp(KeyPointType.LEFT_KNEE, 320f, 850f),
+            kp(KeyPointType.RIGHT_KNEE, 400f, 850f),
+            // 一腳剛離地，踝的信心值掉到門檻下
+            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 1100f, 0.3f),
+            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 1100f, 0.3f),
+        )
+        assertEquals(
+            "高抬腿不宣告腳踝，所以腳踝不可信不是框位問題",
+            FramingIssue.OK,
+            evaluateFraming(liftedFoot, ExerciseType.HIGH_KNEES)
+        )
+        // 同一幀對深蹲仍然是問題 —— 它宣告了腳踝，判定必須依賴它
+        assertEquals(
+            "深蹲宣告腳踝，行為不可改變",
+            FramingIssue.MISSING_ANKLE,
+            evaluateFraming(liftedFoot, ExerciseType.SQUAT)
         )
     }
 

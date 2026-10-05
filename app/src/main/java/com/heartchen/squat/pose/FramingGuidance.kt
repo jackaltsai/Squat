@@ -96,8 +96,24 @@ private fun evaluateLowerBodyFraming(
     // 手腕那條路改了方向（見 missingWristAdvice），但下肢**沒有任何實測證據**
     // 說它有問題，而深蹲家族已經驗證數週 —— 不動已驗證的東西。
     // 下肢的主因也不同：腳踝不可信通常是被下緣裁掉（站太近），方向正好相反。
+    // ⚠️ 腳踝不可信時，**只有這個動作真的宣告需要腳踝，才算是問題。**
+    //
+    // 原地高抬腿刻意**不**宣告腳踝（抬起那腳的踝必然掉信心值，宣告了會讓那些幀
+    // 被品質檢查整幀丟掉，而且正好丟在動作峰值上）。但框位檢查仍然拿腳踝報問題：
+    // 2026-10-05 的逐幀資料裡，訓練中有 **39 連續幀** 報 MISSING_ANKLE
+    // （門檻只要 8 幀），所以使用者真的被念了約 1.8 秒的「請往後站一點」——
+    // 而他站的位置完全正確，腳踝只是剛剛離地過。
+    //
+    // 這與雙臂高舉那個「請讓雙手入鏡」是同一類錯誤：
+    // **拿一個這個動作根本不需要的關鍵點，去報一個不存在的問題。**
+    // 規則是：框位檢查可以**讀**任何關鍵點，但只能對**動作宣告需要**的那些報
+    // MISSING；不需要的點拿不到時，就跳過依賴它的檢查，不要瞎猜。
     val ankleY = averageY(byType, KeyPointType.LEFT_ANKLE, KeyPointType.RIGHT_ANKLE)
-        ?: return FramingIssue.MISSING_ANKLE
+        ?: return if (KeyPointType.LEFT_ANKLE in exercise.requiredPoints) {
+            FramingIssue.MISSING_ANKLE
+        } else {
+            FramingIssue.OK
+        }
 
     val heightPx = frame.imageHeight.toFloat()
     if (heightPx <= 0f) return FramingIssue.OK
