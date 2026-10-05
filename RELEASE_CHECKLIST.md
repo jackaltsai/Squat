@@ -151,6 +151,50 @@ ALTER TABLE squat_rep_records ADD COLUMN exerciseType TEXT NOT NULL DEFAULT 'SQU
 → **不需要**更新資料安全表單、商店資訊或隱私權政策，只要上傳新的 `.aab`
 到同一個 Closed testing 軌道。
 
+### 🪜 建議的發布順序：先 internal testing，確認後再 closed testing
+
+Play 的四個軌道由私到公：
+
+| 軌道 | 誰看得到 | 目前狀態 |
+|---|---|---|
+| **Internal testing** | 只有用 email 加進名單的人（Console 上寫 up to 100） | 未設定 |
+| **Closed testing（alpha）** | 指定的測試人員（走 Google Group） | `3 (1.0)`，Sep 10 1:14 PM |
+| Open testing | 任何人可從公開連結加入，App 會出現在 Play 上 | 未設定 |
+| Production | 真正的公開上架 | 未發布 |
+
+**Internal testing 不是公開上架** —— 它比現在的 closed testing 更私密，
+App 不會出現在 Play 商店搜尋結果。
+
+→ 所以把 `versionCode 4` **先發到 internal testing**，自己驗完
+Room migration 再做 closed testing 的發布。
+**萬一 migration 掛了，踩到的是自己，不是那群真實測試人員。**
+
+兩點注意：
+- Internal testing 的測試人員**不算進** closed testing 那 12 人，
+  也不會推進 14 天的進度 —— 它純粹是自己的測試場
+- 兩條軌道各自獨立，上傳 internal 不會動到 closed testing 上現有的 `3 (1.0)`
+
+更輕量的選項：**Internal app sharing** 連 release 都不用建，上傳 `.aab` 就給一條
+安裝連結，而且**不檢查 versionCode**。純粹要驗 migration 的話那個最快。
+
+（軌道的可見範圍是 Play Console 的固定結構；「幾分鐘生效」「12 人 14 天」
+這類條文 Google 偶爾會調整，以 Console 當下顯示的文字為準。）
+
+### ⚠️ `app/release/app-release.aab` 會留著舊檔，看日期再上傳
+2026-10-05 差點誤傳：檔案選取視窗裡的 `app-release.aab` 是
+**2026-09-10 20:37、40.5 MB** —— 比 checklist 記錄的 `3 (1.0)`（24.1 MB）還大，
+是 9/10 當天稍晚重出、從未上傳過的包。它早於 10-01~10-05 的全部工作。
+
+Android Studio 出包會**覆蓋**同一個路徑，所以上傳前先看：
+- 檔案的「加入日期」是不是**今天**
+- 出包精靈上顯示的是不是 **`4 (1.0)`**
+- 上傳後 Play Console 顯示的版本號
+
+（真的誤傳舊的，Play 會以「versionCode 3 已存在」退掉，不會默默發出去 ——
+但別靠這個擋。）
+
+⚠️ 另外：**沒有先 `git pull` 的話，就算重新出包也還是 `versionCode 3`。**
+
 ### 出包與上傳步驟（需在本機 Android Studio 操作）
 1. `./gradlew test` —— 應為 **96** 條
 2. `Build → Generate Signed App Bundle / APK → Android App Bundle`

@@ -161,11 +161,23 @@ UI: Jetpack Compose
 不允許資料庫降版而閃退，屆時只能解除安裝（會清掉本機歷史紀錄）。切分支前先用
 「匯出全部歷史紀錄」備份 CSV。
 
-### 📍 下次接續（2026-10-05 下午，`438dfa3`）
+### 📍 下次接續（2026-10-05 傍晚，`89292ef`）
 
-10-05 共 14 個 commit（`42febbf` → `438dfa3`），**全部已推上遠端，工作區乾淨**。
+10-05 共 17 個 commit（`42febbf` → `89292ef`），**全部已推上遠端，工作區乾淨**。
 資料庫版本未變（仍是 Room v3），覆蓋安裝即可，**不需要解除安裝**。
-測試應為 **100** 條（踮腳尖 10 + 框位 5 + 尺度追蹤 4 + `RepLedger` 4）。
+測試應為 **96** 條（M9 刪了 9 條、新增 5 條）。
+
+#### 🚀 現在卡在「出包上傳」這一步
+`versionCode` 已改成 **4**（3 被 Play Console 佔用）。接下來要在**本機**做
+—— 這個環境沒有 Android SDK，金鑰也在使用者的 Mac 上，**Claude 做不到**：
+
+1. `git pull` → `./gradlew test`（96 條，**M9 還沒編譯過**）
+2. 實機跑一輪六動作 + 新統計頁
+3. **Room v2 → v3 migration 驗證**（見 `RELEASE_CHECKLIST.md`，這是最高風險）
+4. Generate Signed App Bundle → 先發 internal testing → 驗完再 closed testing
+
+詳細步驟、風險與 Play 軌道說明全部寫在根目錄 `RELEASE_CHECKLIST.md`
+的「versionCode 4 上傳前檢查」一節。
 
 ⚠️ 10-05 的最後三個 commit（框位只對宣告的點報 MISSING、`RepLedger`、工具去重）
 **還沒在有 SDK 的環境跑過 `./gradlew test`**。
@@ -251,6 +263,7 @@ UI: Jetpack Compose
 - [ ] 當天沒做的動作顯示「0 下」而不是空白
 
 #### 下一步建議的優先序
+0. **出包上傳 `versionCode 4`**（見上方，目前卡在這裡）
 
 1. **深蹲與坐站的迴歸實機驗一輪**（最高優先，因為資料完整性）。
    10-05 的迴歸工具說還缺 `SQUAT` 與 `CHAIR_SQUAT` 的場次
