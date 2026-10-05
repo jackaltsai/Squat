@@ -390,6 +390,10 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         var wasReady = false
         var framingIssueStreakValue = FramingIssue.OK
         var framingIssueStreakCount = 0
+        // 狀態機卡住偵測：記住上一次「狀態組合」改變的時間。
+        // 用狀態**有沒有變**而不是「在不在 STAND」，因為卡住的定義就是不再變化。
+        var lastMachineStates: List<SquatState> = emptyList()
+        var lastStateChangeMs = System.currentTimeMillis()
         val analyzer = PoseAnalyzer(isFrontCamera = isFrontCamera) { frame ->
             poseFrame = frame
             // 只檢查當前動作需要的關鍵點：深蹲用不到手腕，手臂動作用不到腳踝，
@@ -417,9 +421,23 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             // 被丟棄的幀**沒有動作資訊**，閘門的理由（動作中會誤報）根本不適用，
             // 而那正是最該講話的時刻 —— 系統看不清楚使用者，就該說出來。
             val atRest = trainingMachines.all { it.state == SquatState.STAND }
+
+            val machineStates = trainingMachines.map { it.state }
+            if (machineStates != lastMachineStates) {
+                lastMachineStates = machineStates
+                lastStateChangeMs = System.currentTimeMillis()
+            }
+            // 卡在非 STAND 太久 → 使用者很可能離開了校正時的位置。
+            // 這是安全網：根因各自修（見 ScaleTracker），但沉默不該是失敗模式。
+            val stuck = !atRest &&
+                System.currentTimeMillis() - lastStateChangeMs > Config.STUCK_STATE_TIMEOUT_MS
+
             // 框位引導同一個問題須連續穩定幾幀才算數，避免動作快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
-            val currentFramingIssue =
-                if (atRest || !isReady) evaluateFraming(frame, selectedExercise) else FramingIssue.OK
+            val currentFramingIssue = when {
+                stuck -> FramingIssue.STUCK
+                atRest || !isReady -> evaluateFraming(frame, selectedExercise)
+                else -> FramingIssue.OK
+            }
             if (currentFramingIssue == framingIssueStreakValue) {
                 framingIssueStreakCount++
             } else {

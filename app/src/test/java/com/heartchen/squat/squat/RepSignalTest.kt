@@ -835,4 +835,110 @@ class RepSignalTest {
         )
         assertTrue("沒有訊號時不該重取", !needsCountdownRebaseline(emptyList()))
     }
+
+    // ---- 尺度追蹤：使用者離開校正距離／轉身之後仍然要能計次 ----
+    //
+    // 2026-10-05 實機：雙臂高舉第 1 下 12:11:54、第 2 下 12:12:17 ——
+    // 中間 23.8 秒舉了很多次毫無反應，而且**一個提示都沒有**。
+    //
+    // 原因：進度是 `(校正時落差 − 當下落差) ÷ 校正時肩寬`，分子逐幀、分母過期，
+    // 不是尺度不變的。身體投影縮小 x% 時，手垂下的進度就變成 `判準 × x%`：
+    // 縮到 0.8（退到 1.25 倍距離）就剛好等於返回門檻，再遠一點就
+    // **永遠回不到 STAND** —— 一下都不計，而且 atRest 永遠 false，框位被當成 OK。
+
+    /**
+     * 把身體整體縮放 [scale] 倍，模擬「站遠」或「轉身」造成的投影縮小
+     * （實測 2026-10-02 那場：肩寬 −30.5% 而腿長只 −6%，主因是轉身）。
+     * 手腕抬到縮放後手臂長的 [fraction] 處。
+     */
+    private fun upperBodyScaled(scale: Float, fraction: Float): Map<KeyPointType, KeyPoint> {
+        val cx = (leftShoulderX + rightShoulderX) / 2f
+        val half = shoulderWidth * scale / 2f
+        val drop = restDrop * scale
+        val wristY = shoulderY + drop - fraction * drop
+        return mapOf(
+            KeyPointType.LEFT_SHOULDER to
+                KeyPoint(KeyPointType.LEFT_SHOULDER, cx - half, shoulderY, 0.9f),
+            KeyPointType.RIGHT_SHOULDER to
+                KeyPoint(KeyPointType.RIGHT_SHOULDER, cx + half, shoulderY, 0.9f),
+            KeyPointType.LEFT_WRIST to
+                KeyPoint(KeyPointType.LEFT_WRIST, cx - half, wristY, 0.9f),
+            KeyPointType.RIGHT_WRIST to
+                KeyPoint(KeyPointType.RIGHT_WRIST, cx + half, wristY, 0.9f),
+        )
+    }
+
+    @Test
+    fun `站在校正距離時進度與加入尺度追蹤前完全相同`() {
+        // 這條鎖住「修這個 bug 不會動到已實機驗證的行為」。
+        // 追蹤器的初始值就是校正肩寬，使用者沒移動時 EMA 停在原地。
+        val signal = armRaiseSignal()
+        listOf(0f to 0f, 0.5f to 0.7f, 1.0f to 1.4f, 1.5f to 2.1f).forEach { (fraction, want) ->
+            assertEquals(
+                "fraction=$fraction",
+                want,
+                signal.progress(upperBodyScaled(1.0f, fraction))!!,
+                1e-5f
+            )
+        }
+    }
+
+    @Test
+    fun `退到校正距離的一點三倍時手垂下仍然低於返回門檻`() {
+        val signal = armRaiseSignal()
+        // 投影縮到 0.75（距離 1.33 倍）。舊寫法在這裡是 0.350，高於返回門檻 0.280，
+        // 於是手垂下也回不到 STAND。
+        repeat(20) { signal.progress(upperBodyScaled(0.75f, 0f)) }
+        val atRest = signal.progress(upperBodyScaled(0.75f, 0f))!!
+        assertTrue(
+            "手垂下的進度 $atRest 必須低於返回門檻 ${signal.returnThreshold}",
+            atRest < signal.returnThreshold
+        )
+    }
+
+    @Test
+    fun `退到校正距離的一點三倍仍然計得到一下且達成率不變`() {
+        val signal = armRaiseSignal()
+        val m = SquatStateMachine(signal)
+        // 先站著讓尺度追蹤器收斂到新的距離
+        repeat(12) { m.update(upperBodyScaled(0.75f, 0f)) }
+        listOf(0.25f, 0.5f, 0.75f, 1.0f).forEach { m.update(upperBodyScaled(0.75f, it)) }
+        listOf(0.9f, 0.75f, 0.6f, 0.4f).forEach { m.update(upperBodyScaled(0.75f, it)) }
+        repeat(10) { m.update(upperBodyScaled(0.75f, 0f)) }
+        assertEquals("舊寫法在這裡是 0 下且永久停在 UP", 1, m.repCount)
+        // 舉到肩高 = p 1.0，與在校正距離做同樣動作相同
+        assertEquals(1.0f, m.lastPeakProgress!! / signal.target!!, 1e-3f)
+    }
+
+    @Test
+    fun `擴胸在非校正距離上同樣的動作幅度得到同樣的進度`() {
+        val signal = chestSignal()
+        val target = signal.target!!
+        // 在校正距離上張開到判準腕距
+        val atCalibration = signal.progress(chest(target * ceShoulderWidth))!!
+        // 縮到 0.75 之後張開到「同樣是 target 個自己的肩寬」
+        val scaled = ChestExpansionSignal(ceRestSeparation, ceShoulderWidth, ceArmLength)
+        val k = 0.75f
+        val cx = 360f
+        val half = ceShoulderWidth * k / 2f
+        fun scaledFrame(separationInShoulders: Float): Map<KeyPointType, KeyPoint> {
+            val sep = separationInShoulders * ceShoulderWidth * k
+            return mapOf(
+                KeyPointType.LEFT_SHOULDER to
+                    KeyPoint(KeyPointType.LEFT_SHOULDER, cx - half, shoulderY, 0.9f),
+                KeyPointType.RIGHT_SHOULDER to
+                    KeyPoint(KeyPointType.RIGHT_SHOULDER, cx + half, shoulderY, 0.9f),
+                KeyPointType.LEFT_WRIST to
+                    KeyPoint(KeyPointType.LEFT_WRIST, cx - sep / 2f, shoulderY + ceArmLength * k, 0.9f),
+                KeyPointType.RIGHT_WRIST to
+                    KeyPoint(KeyPointType.RIGHT_WRIST, cx + sep / 2f, shoulderY + ceArmLength * k, 0.9f),
+            )
+        }
+        repeat(20) { scaled.progress(scaledFrame(ceRestSeparation / ceShoulderWidth)) }
+        val atDistance = scaled.progress(scaledFrame(target))!!
+        assertEquals(
+            "同樣的動作幅度在不同距離上必須得到同樣的進度",
+            atCalibration, atDistance, 1e-2f
+        )
+    }
 }

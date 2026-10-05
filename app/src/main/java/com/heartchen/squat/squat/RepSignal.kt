@@ -49,6 +49,61 @@ interface RepSignal {
  * 三個門檻沿用 M2 以來實測調過的 [Config] 絕對值，**行為與抽象化之前完全相同**
  * （`SquatStateMachineTest` 的四個深蹲迴歸測試即為此而存在）。
  */
+/**
+ * 追蹤「當下的身體像素尺度」，讓上肢訊號成為**尺度不變**的。
+ *
+ * ### 為什麼需要
+ * 上肢訊號原本是 `(校正時腕肩落差 − 當下腕肩落差) ÷ 校正時肩寬` ——
+ * 分子是**逐幀**像素、分母是**校正時**像素，**不是尺度不變的**。
+ * 使用者校正完之後往後退，當下落差整體縮小，手垂下時的進度就不再是 0 而是正值：
+ *
+ * ```
+ * 手垂下時的進度 = 判準 × (1 − 校正距離/當下距離)
+ * ```
+ *
+ * 退到校正距離的 **1.25 倍**（2m 校正、站到 2.5m），這個值就等於返回門檻
+ * （`0.20 × 判準`），於是 `UP → STAND` **永遠不會發生** ——
+ * 一下都不計，而且狀態機永久停在 UP。
+ *
+ * 2026-10-05 實機證據：第 1 下 12:11:54，第 2 下 12:12:17（**中間 23.8 秒**
+ * 舉了很多次毫無反應），之後恢復 3.4~3.8 秒的正常節奏。
+ * 另一份逐幀資料（使用者中途退了 6%）直接重現：手垂下的 260 幀裡
+ * **236 幀超過返回門檻**；改用本追蹤器後是 **0 幀**。
+ *
+ * ### 為什麼不直接用逐幀肩寬
+ * 實測逐幀肩寬抖動 σ = 11%，直接當分母會把抖動灌進進度。
+ * 但**距離變化是慢的（跨步要 0.5 秒以上）、關鍵點抖動是快的（逐幀）**，
+ * 用 EMA 就能分開。實測進度的逐幀 σ：
+ * 校正肩寬 0.078 ／ **EMA 0.052** ／ 逐幀肩寬 0.055 —— EMA 反而最穩。
+ *
+ * 時間常數沿用 [Config.EMA_ALPHA]（座標本身就是用它平滑的，約 3 幀 ≈ 0.14 秒）：
+ * 對「跨一步」綽綽有餘，對逐幀抖動夠鈍。**不另立常數** ——
+ * 同一件事記在兩處就會像 `CalibrationKind` 那樣失去同步。
+ *
+ * ### 為什麼這不會動到已驗證的行為
+ * 初始值就是校正時的肩寬，而且在校正距離上 EMA 會收斂回同一個值 ——
+ * 使用者沒有移動時，進度與改動前**完全相同**。
+ * 判準與三個門檻仍然用**校正值**算（它們定義的是判準本身，不該隨使用者走動而變）。
+ */
+internal class ScaleTracker(initial: Float) {
+    var value: Float = initial
+        private set
+
+    /** 餵入當下量到的尺度；非正值會被忽略（保留上一個可信值）。 */
+    fun update(current: Float): Float {
+        if (current > 0f) {
+            value += Config.EMA_ALPHA * (current - value)
+        }
+        return value
+    }
+}
+
+internal fun shoulderWidthOf(points: Map<KeyPointType, KeyPoint>): Float? {
+    val left = points[KeyPointType.LEFT_SHOULDER] ?: return null
+    val right = points[KeyPointType.RIGHT_SHOULDER] ?: return null
+    return kotlin.math.abs(left.x - right.x)
+}
+
 class SquatSignal(
     private val standBaselineY: Float,
     private val normalizeScale: Float,
@@ -87,14 +142,22 @@ class ArmRaiseSignal(
     /** 校正時的肩寬（像素）。 */
     private val shoulderWidth: Float,
 ) : RepSignal {
+    // 分母改追蹤當下的肩寬（見 ScaleTracker）。分子本來就是兩個逐幀點的差，
+    // 平移免疫；只有尺度是過期的，所以追蹤分母就讓整個訊號尺度不變。
+    private val scale = ScaleTracker(shoulderWidth)
+
     override fun progress(points: Map<KeyPointType, KeyPoint>): Float? {
         if (shoulderWidth <= 0f) return null
         val shoulderY = averageY(points, KeyPointType.LEFT_SHOULDER, KeyPointType.RIGHT_SHOULDER)
             ?: return null
         val wristY = averageY(points, KeyPointType.LEFT_WRIST, KeyPointType.RIGHT_WRIST)
             ?: return null
+        val currentWidth = scale.update(shoulderWidthOf(points) ?: 0f)
+        if (currentWidth <= 0f) return null
         // 影像座標 Y 向下為正：手舉高時 wristY 變小，(wristY - shoulderY) 變小，進度變大。
-        return (restWristBelowShoulder - (wristY - shoulderY)) / shoulderWidth
+        // 校正時的落差也要換算到當下尺度，否則兩項仍然不同單位。
+        val restAtCurrentScale = restWristBelowShoulder * (currentWidth / shoulderWidth)
+        return (restAtCurrentScale - (wristY - shoulderY)) / currentWidth
     }
 
     /** 手腕上舉到肩高（即 wristY == shoulderY）時的進度值。 */
@@ -164,11 +227,18 @@ class ChestExpansionSignal(
     /** 從站姿走到判準的距離。三個門檻都是它的比例，確保換算回像素與改動前一致。 */
     private val travel = target - restProgress
 
+    // 與 ArmRaiseSignal 同一個問題：腕距是逐幀像素、分母是校正時像素。
+    // 使用者往前站會讓腕距整體放大、進度憑空升高，站姿進度一旦高過返回門檻
+    // 就永久卡在 UP（見 ScaleTracker）。
+    private val scale = ScaleTracker(shoulderWidth)
+
     override fun progress(points: Map<KeyPointType, KeyPoint>): Float? {
         if (shoulderWidth <= 0f) return null
         val left = points[KeyPointType.LEFT_WRIST] ?: return null
         val right = points[KeyPointType.RIGHT_WRIST] ?: return null
-        return kotlin.math.abs(left.x - right.x) / shoulderWidth
+        val currentWidth = scale.update(shoulderWidthOf(points) ?: 0f)
+        if (currentWidth <= 0f) return null
+        return kotlin.math.abs(left.x - right.x) / currentWidth
     }
 
     override val enterThreshold = restProgress + travel * Config.CHEST_EXPANSION_ENTER_FRACTION
