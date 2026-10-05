@@ -265,6 +265,73 @@ class FramingGuidanceTest {
         assertEquals(FramingIssue.OK, evaluateFraming(lowerBody(), ExerciseType.HEEL_RAISE))
     }
 
+    // ---- 關鍵點「在畫面裡但信心值不足」要給對方向的建議 ----
+    //
+    // 2026-10-05 實機：雙臂高舉站太遠，手腕信心值掉到門檻下，整場 0 下。
+    // 使用者得到的（修好靜默問題後）會是「請讓雙手入鏡」—— 手明明在畫面裡，
+    // 建議的方向還是錯的。正確的動作是往前站。
+
+    @Test
+    fun `手腕在畫面裡但信心值不足時請使用者往前站`() {
+        val cx = width / 2f
+        val far = frame(
+            kp(KeyPointType.LEFT_SHOULDER, cx - 70f, 400f),
+            kp(KeyPointType.RIGHT_SHOULDER, cx + 70f, 400f),
+            // 手腕垂在畫面 55% 處，位置完全正常，只是信心值追不上
+            KeyPoint(KeyPointType.LEFT_WRIST, cx - 70f, 700f, 0.2f),
+            KeyPoint(KeyPointType.RIGHT_WRIST, cx + 70f, 700f, 0.2f),
+        )
+        assertEquals(
+            "手在畫面裡卻追不準 → 站近一點才會準",
+            FramingIssue.TOO_FAR,
+            evaluateFraming(far, ExerciseType.ARM_RAISE)
+        )
+    }
+
+    @Test
+    fun `手腕舉出畫面上緣且信心值不足時仍說舉到肩膀就好`() {
+        val cx = width / 2f
+        val overhead = frame(
+            kp(KeyPointType.LEFT_SHOULDER, cx - 70f, 400f),
+            kp(KeyPointType.RIGHT_SHOULDER, cx + 70f, 400f),
+            // 原始座標已經貼在畫面上緣（<6%）—— 這是舉太高，不是站太遠
+            KeyPoint(KeyPointType.LEFT_WRIST, cx - 70f, 40f, 0.2f),
+            KeyPoint(KeyPointType.RIGHT_WRIST, cx + 70f, 40f, 0.2f),
+        )
+        assertEquals(
+            FramingIssue.WRIST_NEAR_TOP_EDGE,
+            evaluateFraming(overhead, ExerciseType.ARM_RAISE)
+        )
+    }
+
+    @Test
+    fun `完全沒有手腕關鍵點時才說請讓雙手入鏡`() {
+        val cx = width / 2f
+        val noWrist = frame(
+            kp(KeyPointType.LEFT_SHOULDER, cx - 70f, 400f),
+            kp(KeyPointType.RIGHT_SHOULDER, cx + 70f, 400f),
+        )
+        assertEquals(
+            FramingIssue.MISSING_WRIST,
+            evaluateFraming(noWrist, ExerciseType.ARM_RAISE)
+        )
+    }
+
+    @Test
+    fun `腳踝在畫面裡但信心值不足時請使用者往前站`() {
+        val far = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            // 腳踝在畫面 90% 處（沒有被下緣裁掉），只是信心值不足
+            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 1150f, 0.2f),
+            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 1150f, 0.2f),
+        )
+        assertEquals(
+            FramingIssue.TOO_FAR,
+            evaluateFraming(far, ExerciseType.SQUAT)
+        )
+    }
+
     @Test
     fun `沒有偵測到任何姿態時回報沒有偵測到人`() {
         assertEquals(FramingIssue.NO_POSE, evaluateFraming(null, ExerciseType.SQUAT))

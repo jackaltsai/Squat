@@ -406,10 +406,20 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             // 就是這樣來的。訓練尚未開始時沒有狀態機，一律視為靜止。
             // 所有狀態機都在 STAND 才算靜止。高抬腿左右腳各一台，
             // 只要有一腳還抬著就不該拿那一幀去判框位。
+            //
+            // ⚠️ **但這個閘門只能套在通過品質檢查的幀上。**
+            // 狀態機要靠通過的幀才會前進；幀一直被丟棄時它會**凍結**在 DOWN 或 UP，
+            // 於是 `atRest` 永遠是 false、框位永遠被當成 OK ——
+            // 畫面不顯示、語音不念，使用者在那裡舉了很多下卻**一個提示都沒有**
+            // （2026-10-05 實機：雙臂高舉站太遠，整場 0 下且全程靜默，
+            // 往前一步才恢復）。
+            //
+            // 被丟棄的幀**沒有動作資訊**，閘門的理由（動作中會誤報）根本不適用，
+            // 而那正是最該講話的時刻 —— 系統看不清楚使用者，就該說出來。
             val atRest = trainingMachines.all { it.state == SquatState.STAND }
             // 框位引導同一個問題須連續穩定幾幀才算數，避免動作快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
             val currentFramingIssue =
-                if (atRest) evaluateFraming(frame, selectedExercise) else FramingIssue.OK
+                if (atRest || !isReady) evaluateFraming(frame, selectedExercise) else FramingIssue.OK
             if (currentFramingIssue == framingIssueStreakValue) {
                 framingIssueStreakCount++
             } else {
