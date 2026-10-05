@@ -112,13 +112,66 @@ Play Console → Closed testing → Alpha → Testers，看 opted-in 人數。
 1. **Closed testing** 需要至少 12 人 opted-in、連續跑滿 14 天才能申請 Production
 2. **Production** — 條件滿足後申請，屆時要回答幾題關於這次封閉測試的問題
 
+## versionCode 4 上傳前檢查（2026-10-05）
+
+與已發布的 `3 (1.0)` 相比：**52 個 commit、35 個檔案、+7251 行**。
+發布分支（`claude/android-studio-icon-upload-bii48v`）是
+`claude/elderly-exercises-and-stats` 的**嚴格祖先**（領先 52、落後 0），
+所以不需要合併，直接從開發分支出包。
+
+### 🔴 必須先驗：Room v2 → v3 的 migration 從未在實機跑過
+已發布版是 **Room v2**，這版是 **v3**。測試人員覆蓋安裝時會跑：
+
+```kotlin
+ALTER TABLE squat_rep_records ADD COLUMN exerciseType TEXT NOT NULL DEFAULT 'SQUAT'
+```
+
+而 entity 只有 Kotlin 預設值、**沒有 `@ColumnInfo(defaultValue = "SQUAT")`** ——
+也就是「資料庫有 DEFAULT、entity 沒宣告」。Room 2.7 在這個方向上**應該**寬容，
+但沒有實測保證，而萬一不是，**每個測試人員的 App 第一次開啟就 crash**。
+
+⚠️ **開發機測不到這一段** —— 開發機早就是 v3 了，覆蓋安裝不會觸發 2→3。
+必須：
+1. 先安裝**已發布的 `versionCode 3`**（從 Play 內部測試連結或留存的舊 `.aab`）
+2. 做幾下訓練讓資料庫裡有紀錄
+3. 覆蓋安裝新的 `versionCode 4`
+4. 開 App → 選擇動作畫面 →「匯出全部歷史紀錄」
+   - 能開、紀錄筆數沒少、舊紀錄的 `exerciseType` 是 `SQUAT` → 通過
+   - 一開就閃退 → migration 被 Room 擋下，看 logcat 的
+     `Migration didn't properly handle` 訊息再修
+
+（`RELEASE_CHECKLIST` 第 25 行驗過的是 `MIGRATION_1_2`，**不是這一個**。）
+
+### 不需要動的 Play Console 設定
+`AndroidManifest.xml` 與 `3 (1.0)` **逐字相同**（已比對，零差異）：
+- 沒有新權限
+- 沒有新的資料蒐集（研究模式的 CSV 匯出是使用者主動發起，
+  隱私權政策 3.1 已涵蓋）
+
+→ **不需要**更新資料安全表單、商店資訊或隱私權政策，只要上傳新的 `.aab`
+到同一個 Closed testing 軌道。
+
+### 出包與上傳步驟（需在本機 Android Studio 操作）
+1. `./gradlew test` —— 應為 **96** 條
+2. `Build → Generate Signed App Bundle / APK → Android App Bundle`
+3. Keystore：`~/keystores/squat-release.jks`（alias 與密碼見你的密碼管理器）
+4. Variant `release` → 產出 `app/release/app-release.aab`，確認精靈顯示 `4 (1.0)`
+5. Play Console → Testing → Closed testing → Alpha → **Create new release**
+6. 上傳 `.aab`，Release notes 寫這版的六動作與統計頁改版
+7. Managed publishing 是關閉的，審核通過後會自動生效
+
+### 尚未勾選的既有待辦
+- [ ] ≥12 人完成 opt-in、連續 14 天（新上傳是否影響計算，以 Play Console 當下條文為準）
+- [ ] 金鑰檔案、密碼、別名備份到至少兩個安全位置
+
 ### 版本對照
 
 | versionCode | 內容 | 狀態 |
 |---|---|---|
 | 1 (1.0) | 首版 | 已被取代 |
 | 2 (1.0) | 骨架疊圖一律顯示、警告訊息移到下方 | 已上傳 Closed testing，存檔中 |
-| **3 (1.0)** | **+ 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查、匯出全部歷史** | ✅ **審核通過，已發布到 Closed testing** |
+| 3 (1.0) | + 僅前鏡頭、準備倒數、停止鍵、CSV 分享、CSV 原始值欄位、校正品質檢查、匯出全部歷史 | 審核通過，已發布到 Closed testing |
+| **4 (1.0)** | **+ 六個動作（坐站／雙臂高舉／擴胸推掌／原地高抬腿／踮腳尖）、長者取向 UI、訓練統計改版、Room v3** | 🚧 **待上傳** |
 
 **這輪修的 App bug（2026-09-09）：**
 - 骨架線條/關鍵點疊圖從「除錯模式才顯示」改成一律顯示，方便使用者確認有沒有被偵測到
