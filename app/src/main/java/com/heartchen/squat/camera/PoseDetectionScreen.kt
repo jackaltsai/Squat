@@ -244,7 +244,18 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // 受測者可能離鏡頭較遠看不清楚文字，流程轉換（進入站姿校正/基準校正）也用語音提示一次。
     LaunchedEffect(flowStep, selectedExercise) {
         val message = when (flowStep) {
-            FlowStep.STAND_HOLD -> "請站直不動，準備校正站姿基準"
+            // ⚠️ 原本念的是「請站直不動，準備校正站姿基準」—— **完全沒提手要放哪裡**，
+            // 而上肢動作的判準整個建立在「站姿時手腕低於肩多少」上。
+            // 校正失敗後才念的 calibrationHintFor() 正是事前從來沒給過的那一個指示。
+            //
+            // 實測後果：同一個解剖量（手臂長÷肩寬）由同一段校正程式碼量到，
+            // 雙臂高舉五場 σ = 0.018（1.348~1.394），
+            // 擴胸推掌三場 σ = **0.142**（1.069~1.409）—— 差 8 倍。
+            // 兩者差別在站姿校正時畫面上寫什麼：擴胸的說明是
+            // 「雙臂向兩側打開擴胸，再向前推掌」，使用者讀著它就把手擺開了，
+            // 而系統正在量他「自然下垂」的手腕位置。
+            FlowStep.STAND_HOLD ->
+                "${calibrationHintFor(selectedExercise)}，準備校正站姿基準"
             // 用動作名稱而非寫死「深蹲」：坐站練習走同一條校正流程，
             // 叫使用者「做兩次深蹲」會讓他以為選錯動作了。
             FlowStep.SQUAT_CALIBRATION ->
@@ -970,8 +981,6 @@ private fun StandHoldOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 動作說明與安全提醒在這裡才真正用得上：使用者剛選完動作、正要開始做。
-            // 放在選擇格線上只會變成每格都有的雜訊，放在這裡則是「現在該怎麼做」。
             Text(
                 text = exercise.label,
                 color = Color(0xFF7FE3D4),
@@ -979,10 +988,26 @@ private fun StandHoldOverlay(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
+            // **這一刻唯一重要的指示是「現在身體要擺成什麼樣」**，所以排在最前面、
+            // 字級最大。這 3 秒量到的數字就是整場訓練的分母。
+            //
+            // 原本最醒目的是 exercise.guidance（例如「雙臂向兩側打開擴胸，再向前推掌」），
+            // 而「請站直不動」對手臂一個字都沒說 —— 使用者讀著動作說明把手擺開，
+            // 系統同時在量他「自然下垂」的手腕位置。實測擴胸的校正重現性
+            // 因此比雙臂高舉差 8 倍（σ 0.142 vs 0.018）。
+            Text(
+                text = calibrationHintFor(exercise),
+                color = Color.White,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            // 動作說明降級到校正指示之後：它要回答的是「等一下怎麼做」，
+            // 不是「現在怎麼站」，而現在只有後者會影響量到的基準。
             Text(
                 text = exercise.guidance,
-                color = Color.White,
-                fontSize = 19.sp,
+                color = Color(0xFFBDBDBD),
+                fontSize = 17.sp,
                 textAlign = TextAlign.Center
             )
             exercise.safetyNote?.let { note ->
@@ -993,14 +1018,6 @@ private fun StandHoldOverlay(
                     textAlign = TextAlign.Center
                 )
             }
-            Text(
-                text = "請站直不動",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 6.dp)
-            )
             Text(
                 text = remainingSeconds.coerceAtLeast(0).toString(),
                 color = Color.White,
