@@ -119,6 +119,11 @@ Play Console → Closed testing → Alpha → Testers，看 opted-in 人數。
 `claude/elderly-exercises-and-stats` 的**嚴格祖先**（領先 52、落後 0），
 所以不需要合併，直接從開發分支出包。
 
+### ⚠️ M10（2026-10-08）加了提示音開關與框位距離換算，也沒編譯過
+`be0e055` 改了 `PoseDetectionScreen`（頂部 HUD 重構）、`FramingGuidance`、
+`Config`，並新增 5 條測試。**此環境沒有 Android SDK，一行都沒編譯過。**
+出包前的 `./gradlew test` 不是形式 —— 10-05 當天就壞過一次編譯。
+
 ### 🔴 必須先驗：Room v2 → v3 的 migration 從未在實機跑過
 已發布版是 **Room v2**，這版是 **v3**。測試人員覆蓋安裝時會跑：
 
@@ -196,7 +201,7 @@ Android Studio 出包會**覆蓋**同一個路徑，所以上傳前先看：
 ⚠️ 另外：**沒有先 `git pull` 的話，就算重新出包也還是 `versionCode 3`。**
 
 ### 出包與上傳步驟（需在本機 Android Studio 操作）
-1. `./gradlew test` —— 應為 **96** 條
+1. `./gradlew test` —— 應為 **101** 條（M10 於 2026-10-08 新增 5 條）
 2. `Build → Generate Signed App Bundle / APK → Android App Bundle`
 3. Keystore：`~/keystores/squat-release.jks`（alias 與密碼見你的密碼管理器）
 4. Variant `release` → 產出 `app/release/app-release.aab`，確認精靈顯示 `4 (1.0)`
