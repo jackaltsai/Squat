@@ -361,6 +361,130 @@ class FramingGuidanceTest {
         )
     }
 
+    // ---- 腳踝不可信時改用其他下肢點換算腿長 ----
+    //
+    // 不宣告腳踝的兩個動作（原地高抬腿、踮腳尖）原本在腳踝不可信時一律回 OK，
+    // 遠近判斷整個消失。使用者回報「偵測人物距離可否修正正確一點」——
+    // 跳過依賴不可信點的檢查是對的，「無話可說」不是。
+    //
+    // 換算係數（Config.LEG_SPAN_FROM_*）由三段逐幀錄影量出，下面幾條測試的
+    // 座標都照實測數值換算到 height=1280，不是湊出來的。
+
+    /**
+     * 10-05 實機錄影：訓練中腳踝不可信的 29 幀裡，52% 原始踝座標已過畫面下緣，
+     * 髖→膝從靜止的 118px 漲到 206~246px（H=640）—— 使用者是真的走近手機了。
+     * 換算到 H=1280 即髖→膝 464px，腿長推估 883px = 69%，遠超 0.60 的太近門檻。
+     *
+     * 這一幀原本（回 OK）是沉默的，而正確答案是請他往後站。
+     */
+    @Test
+    fun `高抬腿腳踝不可信但人站太近時仍要提示往後站`() {
+        val tooClose = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            kp(KeyPointType.LEFT_KNEE, 320f, 1064f),
+            kp(KeyPointType.RIGHT_KNEE, 400f, 1064f),
+            // 踝已被下緣裁掉，信心值掉到門檻下
+            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 1290f, 0.2f),
+            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 1290f, 0.2f),
+        )
+        assertEquals(
+            "髖→膝 464px 換算腿長 69% 畫面高，這是真的太近",
+            FramingIssue.TOO_CLOSE,
+            evaluateFraming(tooClose, ExerciseType.HIGH_KNEES)
+        )
+    }
+
+    /**
+     * 10-02 實機錄影的對照組：同樣是腳踝不可信，但原始踝座標沒有一幀出界，
+     * 膝換算得到 0.494~0.578 —— 腳只是離地，站位正確，**就該安靜**。
+     *
+     * 這條與上一條合起來才是重點：換算值要分得開「抬腳」與「站太近」，
+     * 只會其中一邊的話不如不做。
+     */
+    @Test
+    fun `高抬腿腳踝不可信且站位正確時維持安靜`() {
+        val liftedButFine = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            // 髖→膝 348px → 腿長推估 663px = 52% 畫面高，落在 0.20~0.60 之間
+            kp(KeyPointType.LEFT_KNEE, 320f, 948f),
+            kp(KeyPointType.RIGHT_KNEE, 400f, 948f),
+            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, 1150f, 0.3f),
+            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, 1150f, 0.3f),
+        )
+        assertEquals(
+            FramingIssue.OK,
+            evaluateFraming(liftedButFine, ExerciseType.HIGH_KNEES)
+        )
+    }
+
+    /** 踮腳尖宣告的是腳尖，腳踝不可信時就用腳尖換算，且仍適用較嚴的 0.40 下限。 */
+    @Test
+    fun `踮腳尖腳踝不可信時用腳尖換算遠近`() {
+        fun withToes(toeY: Float) = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            kp(KeyPointType.LEFT_TOE, 320f, toeY),
+            kp(KeyPointType.RIGHT_TOE, 400f, toeY),
+            KeyPoint(KeyPointType.LEFT_ANKLE, 320f, toeY - 40f, 0.3f),
+            KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, toeY - 40f, 0.3f),
+        )
+        // 髖→腳尖 654px → 腿長推估 554px = 43%（實機驗證通過的那場距離）
+        assertEquals(
+            "實機驗證通過的距離不該被判太遠",
+            FramingIssue.OK,
+            evaluateFraming(withToes(1254f), ExerciseType.HEEL_RAISE)
+        )
+        // 髖→腳尖 529px → 腿長推估 448px = 35%，低於踮腳尖的 0.40 下限
+        assertEquals(
+            "踮腳尖在 35% 腿長的距離訊噪比不足，應請使用者往前站",
+            FramingIssue.TOO_FAR,
+            evaluateFraming(withToes(1129f), ExerciseType.HEEL_RAISE)
+        )
+    }
+
+    /**
+     * 迴歸：腳踝**可信**時換算一律不得介入。
+     *
+     * 驗證資料說腳踝可信的 1481 幀裡換算與直接量測判定一致率 100%，
+     * 但那是統計；這裡要的是結構保證 —— 給一個離譜的膝座標，
+     * 只要腳踝可信，判定就必須完全由腳踝決定。
+     */
+    @Test
+    fun `腳踝可信時換算不介入判斷`() {
+        val absurdKnee = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+            // 這個膝座標換算出來是 1219px = 95% 畫面高，會被判太近
+            kp(KeyPointType.LEFT_KNEE, 320f, 1240f),
+            kp(KeyPointType.RIGHT_KNEE, 400f, 1240f),
+            // 但腳踝可信，腿長 550px = 43%，答案必須是 OK
+            kp(KeyPointType.LEFT_ANKLE, 320f, 1150f),
+            kp(KeyPointType.RIGHT_ANKLE, 400f, 1150f),
+        )
+        ExerciseType.entries
+            .filter { KeyPointType.LEFT_WRIST !in it.requiredPoints }
+            .forEach { exercise ->
+                assertEquals(
+                    "${exercise.name}：腳踝可信時不該受膝座標影響",
+                    FramingIssue.OK,
+                    evaluateFraming(absurdKnee, exercise)
+                )
+            }
+    }
+
+    /** 髖以下一個可信的點都沒有時不猜，維持 OK（真的卡住由 STUCK 接手）。 */
+    @Test
+    fun `髖以下完全沒有可信點時不猜遠近`() {
+        val hipsOnly = frame(
+            kp(KeyPointType.LEFT_HIP, 320f, 600f),
+            kp(KeyPointType.RIGHT_HIP, 400f, 600f),
+        )
+        assertEquals(FramingIssue.OK, evaluateFraming(hipsOnly, ExerciseType.HIGH_KNEES))
+        assertEquals(FramingIssue.OK, evaluateFraming(hipsOnly, ExerciseType.HEEL_RAISE))
+    }
+
     @Test
     fun `沒有偵測到任何姿態時回報沒有偵測到人`() {
         assertEquals(FramingIssue.NO_POSE, evaluateFraming(null, ExerciseType.SQUAT))

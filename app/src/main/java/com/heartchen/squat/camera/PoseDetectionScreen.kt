@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -220,6 +221,39 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    // M9：提示音總開關。
+    //
+    // 範圍刻意是「所有語音＋所有提示音」，不只計次聲 —— 使用者按下靜音是想要
+    // **安靜**，留著倒數的嘟嘟聲或框位提示不算安靜。老人家在客廳或共用空間練習，
+    // 不想讓手機一直講話是很正常的需求，而全程唯一的替代做法是把整支手機轉靜音，
+    // 那會連來電一起關掉。
+    //
+    // ⚠️ 這兩個 lambda 一定要讀 `soundEnabled.value`（呼叫當下），
+    // 不能在建立時就把 boolean 拷進去：它們會被 LaunchedEffect 與
+    // PoseAnalyzer 的 callback 捕獲並長期持有，拷值的話按下按鈕之後
+    // 那些舊的 lambda 還是會照樣發聲，而且只有部分提示會變安靜 ——
+    // 比完全沒作用更難查。所以狀態用 MutableState、lambda 用 remember 固定身分。
+    val soundEnabled = remember { mutableStateOf(true) }
+    val speak: (String, Int) -> Unit = remember {
+        { message: String, queueMode: Int ->
+            if (soundEnabled.value) {
+                textToSpeech.value?.speak(message, queueMode, null, null)
+            }
+        }
+    }
+    val beep: (Int, Int) -> Unit = remember {
+        { tone: Int, durationMs: Int ->
+            if (soundEnabled.value) {
+                toneGenerator.startTone(tone, durationMs)
+            }
+        }
+    }
+    // 關閉時要掐掉已經排進 TTS 佇列的句子。倒數「準備 3 2 1 開始」與計次語音都是
+    // 連續排進佇列的，不 stop() 的話按下靜音後還會繼續念好幾秒，使用者會以為按壞了。
+    LaunchedEffect(soundEnabled.value) {
+        if (!soundEnabled.value) textToSpeech.value?.stop()
+    }
+
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     DisposableEffect(Unit) {
         onDispose { cameraExecutor.shutdown() }
@@ -232,7 +266,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         if (feedback != null) {
             // 文案取自當前動作：雙臂高舉舉不夠高時該說「手舉太低了」，不是「蹲太淺了」
             val message = selectedExercise.feedback.of(feedback)
-            textToSpeech.value?.speak(message, TextToSpeech.QUEUE_ADD, null, null)
+            speak(message, TextToSpeech.QUEUE_ADD)
             delay(2000)
             depthFeedback = null
         }
@@ -241,7 +275,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // M4：膝內夾同樣只在 BOTTOM 觸發一次，語音提示「膝蓋往外一點」。
     LaunchedEffect(kneeValgusFlag) {
         if (kneeValgusFlag) {
-            textToSpeech.value?.speak(KNEE_VALGUS_MESSAGE, TextToSpeech.QUEUE_ADD, null, null)
+            speak(KNEE_VALGUS_MESSAGE, TextToSpeech.QUEUE_ADD)
             delay(2000)
             kneeValgusFlag = false
         }
@@ -268,13 +302,13 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                 "請完成兩次${selectedExercise.label}，校正基準深度"
             else -> null
         }
-        message?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
+        message?.let { speak(it, TextToSpeech.QUEUE_ADD) }
     }
 
     // 站姿量測失敗（例如舉手動作校正時就把手舉著）也要出聲，理由同下。
     LaunchedEffect(standCalibrationWarning) {
         standCalibrationWarning?.let {
-            textToSpeech.value?.speak(it, TextToSpeech.QUEUE_FLUSH, null, null)
+            speak(it, TextToSpeech.QUEUE_FLUSH)
         }
     }
 
@@ -283,7 +317,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     // 以字串當 key 的話 LaunchedEffect 不會重跑，第二次就不會出聲。
     LaunchedEffect(calibrationRetryCount) {
         if (calibrationRetryCount > 0) {
-            calibrationWarning?.let { textToSpeech.value?.speak(it, TextToSpeech.QUEUE_FLUSH, null, null) }
+            calibrationWarning?.let { speak(it, TextToSpeech.QUEUE_FLUSH) }
         }
     }
 
@@ -293,17 +327,17 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(flowStep) {
         if (flowStep != FlowStep.READY_COUNTDOWN) return@LaunchedEffect
         readyCountdownText = "準備"
-        textToSpeech.value?.speak("準備", TextToSpeech.QUEUE_FLUSH, null, null)
+        speak("準備", TextToSpeech.QUEUE_FLUSH)
         delay(1000)
         for (n in Config.READY_COUNTDOWN_SECONDS downTo 1) {
             readyCountdownText = n.toString()
-            textToSpeech.value?.speak(n.toString(), TextToSpeech.QUEUE_FLUSH, null, null)
-            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            speak(n.toString(), TextToSpeech.QUEUE_FLUSH)
+            beep(ToneGenerator.TONE_PROP_BEEP, 120)
             delay(1000)
         }
         readyCountdownText = "開始！"
-        textToSpeech.value?.speak("開始", TextToSpeech.QUEUE_FLUSH, null, null)
-        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 250)
+        speak("開始", TextToSpeech.QUEUE_FLUSH)
+        beep(ToneGenerator.TONE_PROP_BEEP2, 250)
         delay(800)
         readyCountdownText = null
         // 倒數期間量到的基準取代站姿校正的那一份。量不到（例如整段倒數腳尖都沒入鏡）
@@ -387,7 +421,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         depthFeedback = null
         kneeValgusFlag = false
         flowStep = FlowStep.FINISHED
-        textToSpeech.value?.speak("訓練結束", TextToSpeech.QUEUE_FLUSH, null, null)
+        speak("訓練結束", TextToSpeech.QUEUE_FLUSH)
     }
 
     DisposableEffect(previewView) {
@@ -411,7 +445,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             // 要求全部到齊會讓大量可用的幀被丟棄。
             val isReady = frame != null && frame.passesQualityCheck(selectedExercise.requiredPoints)
             if (isReady && !wasReady) {
-                toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+                beep(ToneGenerator.TONE_PROP_BEEP, 150)
             }
             wasReady = isReady
 
@@ -651,7 +685,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                     val finished = repLedger.harvest(machines, repCountsBefore)
                     val currentRepCount = machines.sumOf { it.repCount }
                     if (finished.isNotEmpty()) {
-                        textToSpeech.value?.speak(currentRepCount.toString(), TextToSpeech.QUEUE_ADD, null, null)
+                        speak(currentRepCount.toString(), TextToSpeech.QUEUE_ADD)
                         sessionRecords = sessionRecords + finished
                         coroutineScope.launch(Dispatchers.IO) {
                             finished.forEach { database.squatRepDao().insert(it) }
@@ -731,63 +765,100 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         }
 
         val currentFrame = poseFrame
-        if (debugMode) {
-            Text(
-                text = if (currentFrame == null) {
-                    "偵測不到關鍵點"
-                } else {
-                    "已偵測 ${currentFrame.keyPoints.size}/${KeyPointType.entries.size} 個關鍵點"
-                },
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
 
-        // 訓練中的右上角只留停止鍵。訓練歷程按鈕已移除 —— 結束摘要本來就會顯示
-        // 同樣的次數/達標比例/膝內夾比例，訓練途中多一個按鈕只是多一個干擾。
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (flowStep == FlowStep.TRAINING) {
-                Text(
-                    text = "停止",
-                    color = Color.White,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .background(Color(0xFFD50000), RoundedCornerShape(12.dp))
-                        .clickable { stopTraining() }
-                        .padding(horizontal = 28.dp, vertical = 14.dp)
-                )
-            }
-            frameLogger?.let { _ ->
-                Text(
-                    text = "研究紀錄中",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-        }
-
+        // 頂部 HUD 整塊包在一個 Column 裡，上面一列是左右兩顆按鈕、下面才是置中的次數。
+        //
+        // ⚠️ 原本三者各自 `align(TopStart/TopCenter/TopEnd)` 掛在同一個 Box 上，
+        // **重疊是必然的**：96sp 的次數加左右各 36dp 內距，兩位數時就有 180dp 寬，
+        // 直接壓到右上角的停止鍵上 —— 使用者按停止會按到半透明的數字框。
+        // Box 的 align 不會互相避讓，排版靠「算一下應該不會撞到」遲早會撞到，
+        // 換成 Row + Column 的父子關係之後，不重疊是**版面結構保證的**，
+        // 不是調參數調出來的。
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .fillMaxWidth()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                // 左上角：提示音開關，與右上角的停止鍵對稱。
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (flowStep != FlowStep.SELECT_EXERCISE && flowStep != FlowStep.FINISHED) {
+                        // 字數刻意跟「停止」一樣是兩個字、字級與內距也一樣，
+                        // 兩顆按鈕在畫面上才是真正的左右對稱。
+                        // 不用喇叭圖示：老人家對「🔊 上面打一槓」要想一下才知道是開還是關，
+                        // 「提示音開 / 提示音關」直接寫出現在的狀態，不需要解讀。
+                        val soundOn = soundEnabled.value
+                        Text(
+                            text = if (soundOn) "提示音開" else "提示音關",
+                            color = Color.White,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .background(
+                                    if (soundOn) Color(0xFF2E7D32) else Color(0xFF616161),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { soundEnabled.value = !soundOn }
+                                .padding(horizontal = 20.dp, vertical = 14.dp)
+                        )
+                    }
+                    if (debugMode) {
+                        Text(
+                            text = if (currentFrame == null) {
+                                "偵測不到關鍵點"
+                            } else {
+                                "已偵測 ${currentFrame.keyPoints.size}/${KeyPointType.entries.size} 個關鍵點"
+                            },
+                            color = Color.White,
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                // 訓練中的右上角只留停止鍵。訓練歷程按鈕已移除 —— 結束摘要本來就會顯示
+                // 同樣的次數/達標比例/膝內夾比例，訓練途中多一個按鈕只是多一個干擾。
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (flowStep == FlowStep.TRAINING) {
+                        Text(
+                            text = "停止",
+                            color = Color.White,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .background(Color(0xFFD50000), RoundedCornerShape(12.dp))
+                                .clickable { stopTraining() }
+                                .padding(horizontal = 28.dp, vertical = 14.dp)
+                        )
+                    }
+                    frameLogger?.let { _ ->
+                        Text(
+                            text = "研究紀錄中",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
             when (flowStep) {
                 FlowStep.TRAINING -> {
                     Text(
@@ -858,7 +929,7 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
         // framingIssue 已在 analyzer 內做連續幀確認，這裡只有在真的穩定改變時才會觸發，不會每幀都重複念。
         LaunchedEffect(framingIssue, showFramingIssue) {
             if (showFramingIssue) {
-                textToSpeech.value?.speak(framingIssue.message, TextToSpeech.QUEUE_ADD, null, null)
+                speak(framingIssue.message, TextToSpeech.QUEUE_ADD)
             }
         }
         // 放在畫面下方：StandHoldOverlay、DepthFeedbackBanner、SQUAT_CALIBRATION 的提示
