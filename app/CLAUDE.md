@@ -165,7 +165,21 @@ UI: Jetpack Compose
 
 #### ✅ M10 提示音開關 + 頂部版面 + 高抬腿／踮腳尖距離偵測（2026-10-08）
 
-使用者 10-08 提的兩件事，都已實作，**尚未編譯、尚未實機驗證**。
+使用者 10-08 提的兩件事，都已實作。
+
+**2026-10-08 本機驗證：`./gradlew test` BUILD SUCCESSFUL，101 條全過、零失敗**
+（`RepSignalTest` 60、`FramingGuidanceTest` **25**、`SquatStateMachineTest` 8、
+`TrainingStatsTest` 7、`ExampleUnitTest` 1）。
+`compileDebugKotlin` 執行成功 —— **M9 與 M10 在無 SDK 環境都沒編譯過**，
+這一步同時替兩批改動解除了「從未編譯」的風險。
+兩個 warning（`ExperimentalGetImage` 的 `@OptIn` 無效、`LocalLifecycleOwner`
+已棄用）在 `82c22ec` 就存在，不是這次改出來的。
+
+M10 那 5 條新測試的期望值是用 Python 複刻 `evaluateLowerBodyFraming` 逐條算出來的
+（見下），**實跑結果與複刻一致** —— 這個環境沒有 Android SDK，複刻是唯一的驗證
+手段，這次證明它可信。
+
+**仍未實機驗證**（下方清單）。
 
 **1. 提示音開關（左上角，與停止鍵對稱）+ 次數框壓到停止鍵**
 
