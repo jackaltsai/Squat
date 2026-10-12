@@ -477,11 +477,32 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
             val stuck = !atRest &&
                 System.currentTimeMillis() - lastStateChangeMs > Config.STUCK_STATE_TIMEOUT_MS
 
+            // 倒數期間重取基準的動作（目前只有踮腳尖）：訓練開始後**不再給遠近建議**。
+            //
+            // 那些動作的基準是在 READY_COUNTDOWN 量的，使用者照著「請往前站」移動
+            // 會讓基準失效 —— 而那正是 2026-10-02 讓踮腳尖看起來做不到的原因
+            // （校正後退 6%，基準誤差／振幅 6.29，整場 0 下）。
+            // **建議本身會破壞它要改善的量測。**
+            //
+            // 「看不見你」那一類（NO_POSE / MISSING_*）仍然要講：那時候這一組
+            // 本來就已經壞了，移動是唯一的補救。被壓下的只有 TOO_FAR / TOO_CLOSE。
+            // 遠近該在開始**之前**講 —— 站姿校正與倒數都還會照常判斷。
+            val suppressDistanceAdvice =
+                flowStep == FlowStep.TRAINING && needsCountdownRebaseline(repSignals)
+
             // 框位引導同一個問題須連續穩定幾幀才算數，避免動作快速移動時單幀關鍵點掉點造成誤報/誤觸語音。
-            val currentFramingIssue = when {
+            val evaluated = when {
                 stuck -> FramingIssue.STUCK
                 atRest || !isReady -> evaluateFraming(frame, selectedExercise)
                 else -> FramingIssue.OK
+            }
+            val currentFramingIssue = if (
+                suppressDistanceAdvice &&
+                (evaluated == FramingIssue.TOO_FAR || evaluated == FramingIssue.TOO_CLOSE)
+            ) {
+                FramingIssue.OK
+            } else {
+                evaluated
             }
             if (currentFramingIssue == framingIssueStreakValue) {
                 framingIssueStreakCount++

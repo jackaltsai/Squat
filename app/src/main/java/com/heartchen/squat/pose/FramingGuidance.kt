@@ -148,17 +148,11 @@ private fun evaluateLowerBodyFraming(
     }
 
     val legSpanRatio = legSpan / heightPx
-    // 踮腳尖的位移只有腿長的 6~8%，訊噪比對拍攝距離**極度敏感** ——
-    // 實測腿長 226px 時只有 7.1、277px 時是 25.0，而 0.20 的一般門檻
-    // 完全擋不住前者（226/640 = 0.35 照樣通過）。所以它要一個更嚴的下限。
-    // 其餘下肢動作的位移大一個數量級，不需要被這個門檻綁住。
-    val tooFarRatio = if (exercise == ExerciseType.HEEL_RAISE) {
-        Config.FRAMING_HEEL_RAISE_MIN_LEG_SPAN_RATIO
-    } else {
-        Config.FRAMING_TOO_FAR_RATIO
-    }
+    // ⚠️ 踮腳尖原本有一個更嚴的下限（0.40）。**已刪除，理由見 Config** ——
+    // 它是用一個從未實作的候選訊號的訊噪比訂的，而對實際送上線的訊號而言，
+    // 它強制的距離比它拒絕的距離更吵（四段錄影一致）。
     return when {
-        legSpanRatio < tooFarRatio -> FramingIssue.TOO_FAR
+        legSpanRatio < Config.FRAMING_TOO_FAR_RATIO -> FramingIssue.TOO_FAR
         legSpanRatio > Config.FRAMING_TOO_CLOSE_RATIO -> FramingIssue.TOO_CLOSE
         else -> FramingIssue.OK
     }

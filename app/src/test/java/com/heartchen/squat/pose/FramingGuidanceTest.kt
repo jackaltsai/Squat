@@ -255,25 +255,39 @@ class FramingGuidanceTest {
     }
 
     /**
-     * 踮腳尖的位移只有腿長的 6~8%，**訊噪比對拍攝距離極度敏感** ——
-     * 實測腿長 226px 時只有 7.1、277px 時是 25.0。
-     * 一般下肢動作的 0.20 門檻完全擋不住前者（226/640 = 0.35 照樣通過），
-     * 所以踮腳尖另有一個 0.40 的下限。
+     * 迴歸：**踮腳尖的距離判準與其他下肢動作相同。**
      *
-     * 這條測試鎖住「同一個距離，深蹲可以、踮腳尖不行」。
+     * 這條測試原本鎖的是反過來的行為（踮腳尖另有一個 0.40 的下限），
+     * 理由寫著「訊噪比對距離極度敏感：腿長 226px 只有 7.1、277px 是 25.0」。
+     * 那兩個數字量的是 `腳跟 − 腳尖` 這個**從未被實作**的候選訊號。
+     *
+     * 2026-10-12 實機：使用者在腿長比 0.357 做了 10 下，全部計到、全部綠燈，
+     * 卻在每一下之間被念「請往前站」（806 幀約 27 秒）—— 靜止時 0.357 低於
+     * 0.40，踮起時髖升得比踝多、漲到 0.399 又變 OK。
+     *
+     * 而用實作中真正使用的訊號量四段錄影的靜止雜訊，結論是**反的**：
+     * 腿長比 0.350~0.357 的三段餘裕 9.0~12.6×，0.432 那段只有 5.8× ——
+     * 0.40 強制的距離比它拒絕的距離更吵。詳見 Config 裡的表。
      */
     @Test
-    fun `踮腳尖的距離下限比其他下肢動作嚴`() {
-        // 腿長 500px = 畫面高的 39%：深蹲沒問題
+    fun `踮腳尖的距離判準與其他下肢動作相同`() {
+        // 腿長 500px = 畫面高的 39%
         val borderline = lowerBody(hipY = 600f, ankleY = 1100f)
         assertEquals(FramingIssue.OK, evaluateFraming(borderline, ExerciseType.SQUAT))
         assertEquals(
-            "踮腳尖在這個距離應請使用者往前站",
-            FramingIssue.TOO_FAR,
+            "0.39 的腿長比實測訊噪比良好，不該請使用者往前站",
+            FramingIssue.OK,
             evaluateFraming(borderline, ExerciseType.HEEL_RAISE)
         )
-        // 腿長 550px = 43%（實機驗證通過的那場）：兩者都該良好
-        assertEquals(FramingIssue.OK, evaluateFraming(lowerBody(), ExerciseType.HEEL_RAISE))
+        // 實機驗證通過的 0.357（10-12 那場）同樣不該被判太遠
+        assertEquals(
+            FramingIssue.OK,
+            evaluateFraming(lowerBody(hipY = 600f, ankleY = 1057f), ExerciseType.HEEL_RAISE)
+        )
+        // 但真的太遠（腿長比 0.15）兩者都該出聲 —— 下限只是回到一般值，不是取消
+        val tooFar = lowerBody(hipY = 600f, ankleY = 792f)
+        assertEquals(FramingIssue.TOO_FAR, evaluateFraming(tooFar, ExerciseType.HEEL_RAISE))
+        assertEquals(FramingIssue.TOO_FAR, evaluateFraming(tooFar, ExerciseType.SQUAT))
     }
 
     // ---- 關鍵點「在畫面裡但信心值不足」要給對方向的建議 ----
@@ -430,17 +444,22 @@ class FramingGuidanceTest {
             KeyPoint(KeyPointType.LEFT_ANKLE, 320f, toeY - 40f, 0.3f),
             KeyPoint(KeyPointType.RIGHT_ANKLE, 400f, toeY - 40f, 0.3f),
         )
-        // 髖→腳尖 654px → 腿長推估 554px = 43%（實機驗證通過的那場距離）
+        // 髖→腳尖 654px → 腿長推估 554px = 43%
         assertEquals(
-            "實機驗證通過的距離不該被判太遠",
             FramingIssue.OK,
             evaluateFraming(withToes(1254f), ExerciseType.HEEL_RAISE)
         )
-        // 髖→腳尖 529px → 腿長推估 448px = 35%，低於踮腳尖的 0.40 下限
+        // 髖→腳尖 529px → 腿長推估 448px = 35%，正是 10-12 實機 10 下全中的距離
         assertEquals(
-            "踮腳尖在 35% 腿長的距離訊噪比不足，應請使用者往前站",
-            FramingIssue.TOO_FAR,
+            "0.35 的腿長比實測餘裕 9~12.6×，不該被判太遠",
+            FramingIssue.OK,
             evaluateFraming(withToes(1129f), ExerciseType.HEEL_RAISE)
+        )
+        // 髖→腳尖 283px → 腿長推估 240px = 19%，低於一般下限
+        assertEquals(
+            "真的太遠時腳尖換算仍要出聲",
+            FramingIssue.TOO_FAR,
+            evaluateFraming(withToes(883f), ExerciseType.HEEL_RAISE)
         )
     }
 
