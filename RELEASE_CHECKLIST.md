@@ -5,7 +5,55 @@
 > `versionCode 3` 已發布到 Closed testing - Alpha，測試連結已生效。
 > **下一個里程碑：12 人完成 opt-in → 連續 14 天 → 申請 Production。**
 
-## 📍 2026-10-12：`4 (1.0)` 已送審（Closed testing - Alpha）
+## 🔴 2026-10-12：送審的是 10-05 的包 —— 改用 `versionCode 5`
+
+### 怎麼發現的
+Closed testing 的軌道卡片寫 **「Release: 4 (1.0) · Last updated: Oct 5, 2026」**。
+查 **App bundle explorer** 確認：
+
+| Version code | Uploaded |
+|---|---|
+| **4** | **Oct 5, 2026, 6:22 AM** |
+| 3 | Sep 10, 2026, 12:38 PM |
+| 2 | Sep 9, 2026, 4:01 AM |
+
+**10-12 重新 Generate 的包從來沒上傳成功** —— `versionCode 4` 在 10-05 就被用掉了，
+Play 不接受重複的 versionCode，所以今天那個包等於白建。
+
+### 那個包缺什麼（10-05 的程式碼）
+含 M8 + M9（統計頁），**M10 一項都沒有**：
+提示音開關、次數框不壓停止鍵、高抬腿／踮腳尖的腿長換算、
+刪除踮腳尖那個反向的 0.40 距離下限、訓練中不給遠近建議、
+`DepthFeedback.SUSPECT`、行距 `1.5.em`。
+
+→ 等於把 10-12 當天回報的兩個問題（**每下被念「請往前站」**、**文字重疊**）
+原封不動發出去。
+
+### 🪤 這個陷阱要記住
+**`versionCode` 改好 ≠ 包有上傳。** 10-05 當天把 `versionCode` 改成 4 並建了包，
+之後七天的工作（M10）全部累積在同一個 versionCode 底下，而那個號碼**早就被用掉了**。
+
+判斷依據只有一個：**App bundle explorer 的 `Uploaded` 日期**。
+軌道卡片的「Last updated」也會透露（這次就是它先露餡的）。
+**Release 頁面上的「Not yet sent for review」只代表沒送審，不代表那個包是新的。**
+
+⚠️ Claude 在這裡犯的錯：看到 Closed testing 已有 `4 (1.0)` 草稿，就**假設**那是
+當天上傳的，還據此建議「不要再上傳一次，APK 內容完全一樣」。
+該查的時候用了假設 —— 與同一天那個「39 連續幀」的誤讀是同一類錯。
+
+### 補救步驟
+1. Publishing overview → **Remove changes**（把 `4 (1.0)` 撤出審核）
+2. `versionCode` 改成 **5**（已改，見本 commit）
+3. `git pull` → `./gradlew test`（107 條）
+4. Generate Signed App Bundle → **確認精靈顯示 `5 (1.0)`**
+5. Closed testing → **Create new release** → 上傳 → 貼 release notes → 送審
+6. 上傳後**立刻回 App bundle explorer 確認 `5` 的 Uploaded 日期是今天**
+
+> 第 6 步是新加的，就是為了不要再發生一次。
+
+---
+
+## 📍 2026-10-12：`4 (1.0)` 已送審 —— ⚠️ 作廢，見上（Closed testing - Alpha）
 
 | | |
 |---|---|

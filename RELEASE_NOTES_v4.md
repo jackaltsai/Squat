@@ -1,6 +1,6 @@
-# versionCode 4 (1.0) 發布說明
+# versionCode 5 (1.0) 發布說明
 
-> 對照已發布的 `versionCode 3`（Closed testing - Alpha，2026-09-10）：
+> 對照已發布的 `versionCode 3`（`4` 的包是 10-05 建的、已作廢，見 RELEASE_CHECKLIST.md）（Closed testing - Alpha，2026-09-10）：
 > **63 個 commit**。`AndroidManifest.xml` 與 v3 逐字相同 ——
 > 沒有新權限、沒有新的資料蒐集，**不需要更新資料安全表單、商店資訊或隱私權政策**。
 
