@@ -847,8 +847,10 @@ class RepSignalTest {
         val signal = heelRaiseSignal()
         val max = signal.plausibleMax
         assertNotNull("踮腳尖必須宣告生理上限", max)
-        // 實測那兩下：0.3763（約 32cm）與 0.2231（約 19cm）
-        listOf(0.3763f, 0.2231f).forEach { peak ->
+        // 六場錄影裡全部六下已知的異常，最小的是 0.1636（13.9cm）。
+        // 0.1882 與 0.2663 來自 10-12 13:02 那場 —— 刻意在倒數後往前走一步做出來的，
+        // 而上限還是 0.21 時只抓到 0.2663，0.1882（p = 3.14）被存成 GREEN。
+        listOf(0.3763f, 0.3327f, 0.2663f, 0.2231f, 0.1882f, 0.1636f).forEach { peak ->
             assertEquals(
                 "dNow=$peak 超出生理範圍，不該評級",
                 DepthFeedback.SUSPECT,
@@ -866,8 +868,7 @@ class RepSignalTest {
             0.0991f to DepthFeedback.GREEN,   // p = 1.65
             0.0614f to DepthFeedback.GREEN,   // p = 1.02
             0.0334f to DepthFeedback.RED,     // p = 0.56
-            0.1097f to DepthFeedback.GREEN,   // 10-05 最大的正常一下，約 9.3cm
-            0.1636f to DepthFeedback.GREEN,   // 10-05 第 4 下，約 13.9cm —— 刻意不標記
+            0.1097f to DepthFeedback.GREEN,   // 六場 74 下正常紀錄裡最大的一下，約 9.3cm
         ).forEach { (peak, expected) ->
             assertEquals(
                 "dNow=$peak 應照表 1 評級",
