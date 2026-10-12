@@ -836,6 +836,121 @@ class RepSignalTest {
         assertTrue("沒有訊號時不該重取", !needsCountdownRebaseline(emptyList()))
     }
 
+    // ---- 生理合理性：量到不可能的幅度時不評級 ----
+    //
+    // 2026-10-12 實機（30 下）第 21、22 下記到 dNow 0.3763 / 0.2231，約 32cm / 19cm，
+    // 而完整提踵只有 8~12cm。同樣的異常出現過三次，**每一次都被存成 GREEN** ——
+    // 系統對著一個它根本沒量準的動作說「做得好」，而那些紀錄會污染 M5 的驗證集。
+
+    @Test
+    fun `踮腳尖量到超出生理範圍的幅度時不評級`() {
+        val signal = heelRaiseSignal()
+        val max = signal.plausibleMax
+        assertNotNull("踮腳尖必須宣告生理上限", max)
+        // 實測那兩下：0.3763（約 32cm）與 0.2231（約 19cm）
+        listOf(0.3763f, 0.2231f).forEach { peak ->
+            assertEquals(
+                "dNow=$peak 超出生理範圍，不該評級",
+                DepthFeedback.SUSPECT,
+                gradeRep(peak, peak / signal.target!!, TrainingMode.BEGINNER, max)
+            )
+        }
+    }
+
+    @Test
+    fun `踮腳尖在生理範圍內照論文表一評級`() {
+        val signal = heelRaiseSignal()
+        val max = signal.plausibleMax
+        // 10-12 那場 30 下的實際範圍，以及 10-05 最大的一下與那個「可疑但不是不可能」的 0.1636
+        mapOf(
+            0.0991f to DepthFeedback.GREEN,   // p = 1.65
+            0.0614f to DepthFeedback.GREEN,   // p = 1.02
+            0.0334f to DepthFeedback.RED,     // p = 0.56
+            0.1097f to DepthFeedback.GREEN,   // 10-05 最大的正常一下，約 9.3cm
+            0.1636f to DepthFeedback.GREEN,   // 10-05 第 4 下，約 13.9cm —— 刻意不標記
+        ).forEach { (peak, expected) ->
+            assertEquals(
+                "dNow=$peak 應照表 1 評級",
+                expected,
+                gradeRep(peak, peak / signal.target!!, TrainingMode.BEGINNER, max)
+            )
+        }
+    }
+
+    /**
+     * 迴歸：**沒有宣告上限的動作行為完全不變。**
+     *
+     * 其餘五個動作沒有實測資料可以推導上限，而憑推算訂門檻在這個專案已經被
+     * 實機打臉四次。它們的 `plausibleMax` 是 null，不管幅度多大都照表 1 評級。
+     */
+    @Test
+    fun `沒有宣告生理上限的動作一律照表一評級`() {
+        // 雙臂高舉實測 p 到過 2.343，那是正常的（判準是「舉到肩高」，舉過頭就 >1）
+        assertEquals(
+            DepthFeedback.GREEN,
+            gradeRep(peakProgress = 99f, p = 2.343f, mode = TrainingMode.BEGINNER, plausibleMax = null)
+        )
+        assertEquals(
+            DepthFeedback.RED,
+            gradeRep(peakProgress = 99f, p = 0.41f, mode = TrainingMode.BEGINNER, plausibleMax = null)
+        )
+    }
+
+    @Test
+    fun `六個動作裡只有踮腳尖宣告生理上限`() {
+        assertNotNull("踮腳尖應宣告上限", heelRaiseSignal().plausibleMax)
+        assertNull("雙臂高舉不該宣告上限", armRaiseSignal().plausibleMax)
+        assertNull("深蹲家族不該宣告上限", SquatSignal(600f, 400f).plausibleMax)
+    }
+
+    /**
+     * 判斷要用峰值進度，**不能用 p**。
+     *
+     * p 的分母對深蹲家族是校正所得的 `Duser`，校正做得淺時 p 會憑空變大 ——
+     * 拿 p 判斷會把「校正太淺」誤判成「量測不可信」。實測就有這種場次：
+     * 10-05 同一天兩場深蹲的 Duser 差 43%（0.2477 vs 0.1734），
+     * 後者整場綠燈正是因為基準被拉低。那是校正品質問題，不是量測失效。
+     */
+    @Test
+    fun `生理上限對著原始幅度判斷而不是達成率`() {
+        val max = Config.HEEL_RAISE_PLAUSIBLE_MAX_RISE_RATIO
+        // 幅度正常、但分母很小讓 p 衝到 5 —— 這是校正問題，不該標記為量測失效
+        assertEquals(
+            "p 很大但幅度正常時仍要評級",
+            DepthFeedback.GREEN,
+            gradeRep(peakProgress = 0.08f, p = 5.0f, mode = TrainingMode.BEGINNER, plausibleMax = max)
+        )
+        // 反過來：幅度超標但 p 剛好落在紅燈區，仍然要標記
+        assertEquals(
+            "幅度超標時不論 p 落在哪一段都不評級",
+            DepthFeedback.SUSPECT,
+            gradeRep(peakProgress = 0.5f, p = 0.3f, mode = TrainingMode.BEGINNER, plausibleMax = max)
+        )
+    }
+
+    /**
+     * SUSPECT 的文案講的是**量測**而不是動作，所以六個動作共用一句，
+     * 而且不可以出現任何動作特定的用語 —— 那正是 `DepthFeedback` 當初
+     * 自帶文案時「舉手被念蹲太淺了」的那個錯。
+     */
+    @Test
+    fun `未評級的文案六個動作共用且不含動作特定用語`() {
+        ExerciseType.entries.forEach { exercise ->
+            val message = exercise.feedback.of(DepthFeedback.SUSPECT)
+            assertEquals(
+                "${exercise.name} 的未評級文案應為共用那一句",
+                SUSPECT_MESSAGE,
+                message
+            )
+            listOf("蹲", "舉", "張開", "抬", "踮").forEach { word ->
+                assertTrue(
+                    "${exercise.name}：未評級文案不該含動作用語「$word」—— 它講的是量測",
+                    !message.contains(word)
+                )
+            }
+        }
+    }
+
     // ---- 尺度追蹤：使用者離開校正距離／轉身之後仍然要能計次 ----
     //
     // 2026-10-05 實機：雙臂高舉第 1 下 12:11:54、第 2 下 12:12:17 ——

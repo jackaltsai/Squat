@@ -70,7 +70,7 @@ import com.heartchen.squat.squat.SquatState
 import com.heartchen.squat.squat.SquatStateMachine
 import com.heartchen.squat.squat.TrainingMode
 import com.heartchen.squat.squat.detectKneeValgus
-import com.heartchen.squat.squat.evaluateDepthFeedback
+import com.heartchen.squat.squat.gradeRep
 import com.heartchen.squat.squat.judgesKneeValgus
 import com.heartchen.squat.squat.kneeValgusRatio
 import com.heartchen.squat.squat.needsCountdownRebaseline
@@ -686,7 +686,15 @@ fun PoseDetectionScreen(modifier: Modifier = Modifier) {
                         Log.d(TAG, "kneeValgusRatio=$valgusRatio kneeValgus=$kneeValgus")
                         if (dNow != null && dUser != null && dUser > 0f) {
                             val p = dNow / dUser
-                            val feedback = evaluateDepthFeedback(p, trainingMode)
+                            // 先問「這個量測可不可信」，再問「做得夠不夠」。
+                            // 超出生理範圍時仍然計次（有動作就計次是 M8 的設計），
+                            // 但不評級 —— 寫 GREEN 等於對一個沒量準的動作說「做得好」。
+                            val feedback = gradeRep(
+                                peakProgress = dNow,
+                                p = p,
+                                mode = trainingMode,
+                                plausibleMax = triggered.signal.plausibleMax
+                            )
                             depthFeedback = feedback
                             // dNow / dUser / valgusRatio 是門檻判定前的原始值，一併留存供 M5 重新掃描門檻。
                             repLedger.hold(triggered, SquatRepRecord(
@@ -1313,6 +1321,8 @@ private fun DepthFeedbackBanner(feedback: DepthFeedback, message: String) {
         DepthFeedback.GREEN -> Color(0xFF00C853)
         DepthFeedback.YELLOW -> Color(0xFFFFAB00)
         DepthFeedback.RED -> Color(0xFFD50000)
+        // 刻意不是綠/黃/紅：這一格不是三段式的一員，而是「沒有評級」。
+        DepthFeedback.SUSPECT -> Color(0xFF546E7A)
     }
     Box(
         modifier = Modifier

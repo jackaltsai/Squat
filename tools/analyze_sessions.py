@@ -249,14 +249,35 @@ def main():
         p = d["depthRatio"]
         green, yellow = THRESHOLDS[mode]
         print(f"\n=== {name} | {mode} (綠≥{green}, 黃≥{yellow}) ===")
-        print(f"  次數 {len(d)}   p: 平均={p.mean():.3f} 標準差={p.std():.3f} "
-              f"範圍={p.min():.3f}~{p.max():.3f}  CV={p.std()/p.mean()*100:.1f}%")
+        # p 的統計排除未評級的那些：2026-10-12 那場 30 下裡兩下記到 p=6.27 / 3.72，
+        # 把 CV 從約 32% 拉到 87% —— 那不是動作變異，是量測失效。
+        pv = d.loc[d["feedbackColor"] != "SUSPECT", "depthRatio"]
+        if len(pv):
+            print(f"  次數 {len(d)}   p: 平均={pv.mean():.3f} 標準差={pv.std():.3f} "
+                  f"範圍={pv.min():.3f}~{pv.max():.3f}  CV={pv.std()/pv.mean()*100:.1f}%"
+                  + (f"（已排除 {len(d) - len(pv)} 下未評級）" if len(pv) != len(d) else ""))
+        else:
+            print(f"  次數 {len(d)}   p: —（整場都沒有評級）")
         print("  分級:", d["feedbackColor"].value_counts().to_dict())
 
-        mismatch = (p.apply(lambda v: expected_color(v, mode)) != d["feedbackColor"]).sum()
-        print(f"  分級邏輯: {'✅ 全部相符' if mismatch == 0 else f'❌ {mismatch} 筆不符'}")
-        if mismatch:
-            regressions.append((name, "—", f"分級邏輯 {mismatch} 筆與論文表 1 不符"))
+        # SUSPECT 不是三段式的一員，而是「量到的幅度超出生理可能範圍，沒有評級」。
+        # 重算表 1 再比對會把它全部報成不符 —— 那是工具自己的誤判。
+        # 分開報：分級一致率只算有評級的那些，可疑的單獨列出來。
+        suspect = d["feedbackColor"] == "SUSPECT"
+        graded = d[~suspect]
+        if suspect.any():
+            print(f"  ⚠️  {int(suspect.sum())}/{len(d)} 下超出生理範圍、未評級（SUSPECT）"
+                  f"—— dNow {', '.join(f'{v:.4f}' for v in d.loc[suspect, 'dNow'])}")
+            print("      成因通常是倒數取基準之後移動了位置；這些下**不可列入 M5 的驗證集**。")
+        if len(graded):
+            gp = graded["depthRatio"]
+            mismatch = (gp.apply(lambda v: expected_color(v, mode)) != graded["feedbackColor"]).sum()
+            print(f"  分級邏輯: {'✅ 全部相符' if mismatch == 0 else f'❌ {mismatch} 筆不符'}"
+                  + (f"（{len(graded)}/{len(d)} 下有評級）" if suspect.any() else ""))
+            if mismatch:
+                regressions.append((name, "—", f"分級邏輯 {mismatch} 筆與論文表 1 不符"))
+        else:
+            print("  分級邏輯: —（整場都沒有評級）")
 
         raw_ex = d["exerciseType"].iloc[0] if "exerciseType" in d.columns else None
         exercise = raw_ex if isinstance(raw_ex, str) else "SQUAT"
@@ -298,11 +319,11 @@ def main():
                               f"（間隔 {gap:.0f}s，未達切場門檻 "
                               f"{SESSION_GAP_SECONDS}s）")
             if exercise in SQUAT_FAMILY:
-                if p.mean() > SUSPECT_MEAN_P_HIGH:
-                    print(f"  ⚠️  平均 p={p.mean():.2f} 偏高 —— 兩下基準動作可能做得太淺，"
+                if len(pv) and pv.mean() > SUSPECT_MEAN_P_HIGH:
+                    print(f"  ⚠️  平均 p={pv.mean():.2f} 偏高 —— 兩下基準動作可能做得太淺，"
                           f"Duser 被拉低，綠燈是假性達標")
-                elif p.mean() < SUSPECT_MEAN_P_LOW:
-                    print(f"  ⚠️  平均 p={p.mean():.2f} 偏低 —— 兩下基準動作可能過深，"
+                elif pv.mean() < SUSPECT_MEAN_P_LOW:
+                    print(f"  ⚠️  平均 p={pv.mean():.2f} 偏低 —— 兩下基準動作可能過深，"
                           f"或訓練時明顯偷懶")
             else:
                 # 非深蹲家族的分母是固定解剖判準，不是基準動作，所以 p 偏高只代表
@@ -318,8 +339,8 @@ def main():
                               f"手臂長被低估會讓判準變小、整場 p 偏高")
                         print(f"     （參考值目前只有少數場次可依據，容差 "
                               f"±{ARM_TO_SHOULDER_TOLERANCE} 是暫定的）")
-                if p.mean() > SUSPECT_MEAN_P_HIGH:
-                    print(f"  平均 p={p.mean():.2f} 高於判準 —— 幅度做得比判準大，"
+                if len(pv) and pv.mean() > SUSPECT_MEAN_P_HIGH:
+                    print(f"  平均 p={pv.mean():.2f} 高於判準 —— 幅度做得比判準大，"
                           f"若整場都綠代表判準偏鬆（見 Config 的 TARGET_FRACTION 註解）")
         else:
             print("  ⚠️  這份 CSV 沒有 duser / dNow 欄位（v3 以前的舊格式），無法診斷校正品質")
@@ -336,8 +357,10 @@ def main():
             ),
             "模式": d["mode"].iloc[0],
             "次數": len(d),
-            "p平均": round(d["depthRatio"].mean(), 3),
-            "p標準差": round(d["depthRatio"].std(), 3),
+            # 與上面逐場的統計用同一個 pv（已排除未評級），否則同一份輸出裡
+            # 同一個量會出現兩個數字 —— 這個工具在 10-02 就犯過一次。
+            "p平均": round(pv.mean(), 3) if len(pv) else float("nan"),
+            "p標準差": round(pv.std(), 3) if len(pv) else float("nan"),
             "膝內夾": int(d["kneeValgus"].sum()),
         }
         if has_raw and d["duser"].notna().any():

@@ -11,8 +11,20 @@ class SquatTypeConverters {
     @TypeConverter
     fun fromDepthFeedback(value: DepthFeedback): String = value.name
 
+    /**
+     * 未知名稱退回 [DepthFeedback.SUSPECT]，理由同 [toExerciseType]：
+     * 讓一筆紀錄分類不精確，好過讓整頁歷史紀錄打不開。
+     *
+     * 退回 SUSPECT 而不是三段中的任何一段，是因為那正是它的語意 ——
+     * **一個讀不懂的評級就是一個無法解讀的量測。** 退回 GREEN 會變成
+     * 「你做得很好」、退回 RED 會變成「你做得不夠」，兩個都是憑空的斷言。
+     */
     @TypeConverter
-    fun toDepthFeedback(value: String): DepthFeedback = DepthFeedback.valueOf(value)
+    fun toDepthFeedback(value: String): DepthFeedback =
+        runCatching { DepthFeedback.valueOf(value) }.getOrElse {
+            Log.w("SquatTypeConverters", "Unknown DepthFeedback '$value', falling back to SUSPECT")
+            DepthFeedback.SUSPECT
+        }
 
     @TypeConverter
     fun fromTrainingMode(value: TrainingMode): String = value.name

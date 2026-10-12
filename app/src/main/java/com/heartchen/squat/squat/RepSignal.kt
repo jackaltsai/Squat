@@ -40,6 +40,16 @@ interface RepSignal {
 
     /** 進度低於此值視為回到站姿（UP → STAND，計次 +1）。 */
     val returnThreshold: Float
+
+    /**
+     * 單下峰值進度的生理上限。超過代表**這個量測不可信**，該下不評級
+     * （[DepthFeedback.SUSPECT]），但仍然計次。
+     *
+     * **預設 null = 這個動作沒有已知的上限**，行為與加入這個欄位之前完全相同。
+     * 只有真的有實測資料可以推導上限的動作才該覆寫它 ——
+     * 憑推算訂門檻在這個專案已經被實機打臉四次。
+     */
+    val plausibleMax: Float? get() = null
 }
 
 /**
@@ -513,6 +523,10 @@ class HeelRaiseSignal(
     override val enterThreshold: Float = target * Config.HEEL_RAISE_ENTER_FRACTION
     override val turnConfirmRise: Float = target * Config.HEEL_RAISE_TURN_CONFIRM_FRACTION
     override val returnThreshold: Float = target * Config.HEEL_RAISE_RETURN_FRACTION
+
+    // 固定分母保住了振幅，代價是對「倒數取基準之後移動」天生敏感 ——
+    // 走近鏡頭會讓 (腳尖−髖) 整體放大，進度憑空變大。實測出現過三次。
+    override val plausibleMax: Float = Config.HEEL_RAISE_PLAUSIBLE_MAX_RISE_RATIO
 }
 
 /**
