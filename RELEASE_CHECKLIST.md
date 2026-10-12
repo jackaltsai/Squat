@@ -205,8 +205,9 @@ Android Studio 出包會**覆蓋**同一個路徑，所以上傳前先看：
 2. `Build → Generate Signed App Bundle / APK → Android App Bundle`
 3. Keystore：`~/keystores/squat-release.jks`（alias 與密碼見你的密碼管理器）
 4. Variant `release` → 產出 `app/release/app-release.aab`，確認精靈顯示 `4 (1.0)`
-5. Play Console → Testing → Closed testing → Alpha → **Create new release**
-6. 上傳 `.aab`，Release notes 寫這版的六動作與統計頁改版
+5. Play Console → Testing → **Internal testing**（先，見上）→ **Create new release**
+6. 上傳 `.aab`，Release notes **直接複製 `RELEASE_NOTES_v4.md` 第 1 節**
+   （已寫好、164/500 字元；該檔第 2 節是給測試人員的公告草稿）
 7. Managed publishing 是關閉的，審核通過後會自動生效
 
 ### 尚未勾選的既有待辦
