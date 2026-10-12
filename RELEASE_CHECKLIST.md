@@ -53,6 +53,69 @@ Play 不接受重複的 versionCode，所以今天那個包等於白建。
 
 ---
 
+## ⏰ 待辦（截止 2027-02）：DEX code optimization 未達 Play 門檻
+
+Play Console → Test and release → **For your next release** 顯示 **Needs attention**：
+
+> **DEX code optimization is below our threshold**
+> Improve your percentages in the following categories: **Obfuscation (1%)**
+> Percentages under 25% in any category of your app may impact your **visibility
+> and publishing capabilities** on Google Play.
+> Release name: 5 (1.0) ｜ **Fix by Feb 2027**
+
+### 根因：R8 整個沒開
+`app/build.gradle.kts`：
+
+```kotlin
+buildTypes {
+    release {
+        optimization {
+            enable = false      // ← 壓縮/混淆/優化全部關閉
+        }
+    }
+}
+```
+
+`app/proguard-rules.pro` 也是空的（只有註解）。所以不是規則沒寫對，是**根本沒跑**。
+
+### 為什麼 2026-10-12 當天不處理
+1. `5 (1.0)` 正在審核 —— 插隊要 Remove changes、重出 `6`、再等一輪，
+   而當天已經為了 versionCode 繞過一次
+2. **開 R8 會改變執行期行為**，是必須自己跑一輪實機的改動，不是改個旗標
+3. 截止是 **Feb 2027**，還有四個月
+4. 眼前的長路是 12 人 × 14 天的時鐘，那才是論文時程的瓶頸
+
+### 建議時機與做法
+等 `5 (1.0)` 通過、跑完那輪六動作驗證之後 —— 那時有**已知良好的基準**可對照：
+
+1. 開 R8 → 出 `6 (1.0)` → 審核
+2. **用同一份檢查清單再跑一次**（六動作、統計頁、提示音開關、匯出 CSV）
+3. 確認沒問題再發招募海報
+
+招募可以同時進行（問人點頭不需要 App 能跑），所以不會拖到 14 天的時鐘。
+
+改動大致如下：
+
+```kotlin
+release {
+    optimization { enable = true }
+    proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro"
+    )
+}
+```
+
+⚠️ **特別要測的三處**（最容易被混淆弄壞）：
+- `SessionExporter` 的 CSV 匯出與 FileProvider 分享
+- Room 的 entity / `SquatTypeConverters`（enum 以 name 字串存取）
+- ML Kit 與 CameraX（通常自帶 consumer rules，但要實際確認）
+
+📝 41MB 裡大部分是 ML Kit 的模型（asset 不是 DEX），所以**開 R8 檔案不會瘦很多** ——
+做這件事的理由是 Play 的門檻，不是容量。
+
+---
+
 ## 📍 Production 的門檻（2026-10-12 於 Play Console 查證）
 
 帳號是 **Personal account**（ChungChen Tsai），所以 2023/11/13 之後個人帳號的
