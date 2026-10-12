@@ -73,6 +73,22 @@ Google 逐字寫的三項：
 
 `Apply for production` 按鈕在三項都完成前是灰的。
 
+### 🔑 第三項的 tooltip 把「14 天」講得更嚴格
+> When you apply for production access, at least 12 testers must be opted-in to
+> your closed test. **They must have been opted-in for the last 14 days continuously**
+
+不是「測試跑滿 14 天」，是**申請當下有 12 個人，而且這 12 個人各自在「最近 14 天」
+都持續 opted-in**。兩個實際後果：
+
+1. **要一次把人湊齊，不要分批。** 14 天的窗口是每個人各自算的 ——
+   第 1 天找到 6 個、第 7 天才找到另外 6 個，第二批要到第 21 天才滿。
+   **時鐘等於從第 12 個人 opt-in 那天才真正開始。**
+2. **中途退出的人不能用別人補進度。** 補進來的新人自己要再滿 14 天。
+   → 所以要徵 **15~16 人**：你需要 12 個「連續在裡面 14 天」的人，
+   不是 12 個「現在在裡面」的人。
+
+（先前「有人退出會重算」只見於第三方指南、官方未證實；這個 tooltip 確認了實質。）
+
 ### 🔑 計數器是 0，而作者本人已在 Google Group 裡
 實證了「**加入群組 ≠ 已 opt in**」：群組成員 1 人，但 opted-in 計數是 **0**。
 作者自己也要走完 opt-in 流程（反正要裝下來測 release build 本來就得走）。
