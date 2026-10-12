@@ -1,0 +1,20 @@
+# ⚠️ 這個檔案存在的唯一理由：**R8 會改名 enum 常數，而這個 App 把 enum 的名字寫進
+# 資料庫與研究用的 CSV。** 沒有這條規則，故障模式是**靜默的資料損毀**，不是閃退。
+#
+# 寫入 enum 名字的地方：
+#   SquatTypeConverters   DepthFeedback / TrainingMode / ExerciseType
+#                         → `.name` 存進 Room，`valueOf(name)` 讀回來
+#                         （而且 DepthFeedback 與 ExerciseType 的 valueOf 有
+#                            defensive fallback，被改名時不會丟例外，
+#                            會**安靜地把每一筆都歸錯類** —— 更難發現）
+#   SessionExporter       exerciseType / mode / feedbackColor 寫進每下紀錄的 CSV
+#   FrameLogger           KeyPointType 當成逐幀 CSV 的**欄位名稱**
+#                         （`LEFT_HIP_raw_x` 之類；被改名的話全部分析腳本都讀不了）
+#   PoseDetectionScreen   FlowStep / SquatState / FramingIssue 寫進逐幀 CSV
+#
+# 這些名字是**論文資料的一部分**，不只是內部識別字。
+#
+# 範圍限定在自家套件，而且只擋 enum —— 其餘程式碼照常被優化。
+-keepclassmembers enum com.heartchen.squat.** {
+    *;
+}

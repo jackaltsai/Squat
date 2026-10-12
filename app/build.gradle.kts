@@ -14,7 +14,7 @@ android {
         applicationId = "com.heartchen.squat"
         minSdk = 24
         targetSdk = 37
-        versionCode = 5
+        versionCode = 6
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -22,8 +22,17 @@ android {
 
     buildTypes {
         release {
+            // Play Console 的「DEX code optimization is below our threshold」
+            // （Obfuscation 1%，門檻 25%，Fix by Feb 2027）就是因為這裡原本是 false ——
+            // 壓縮/混淆/優化整個沒跑。
+            //
+            // AGP 9.3+ 的新 DSL：`enable = true` 同時開啟程式碼與資源優化，
+            // 並**內建一組等同 proguard-android-optimize.txt 的預設 keep 規則**，
+            // 所以不需要再寫 `proguardFiles`。
+            // 自訂 keep 規則放在 `src/<variant>/keepRules/*.keep`
+            // （見 app/src/release/keepRules/squat.keep —— 那條是必要的，不是保險）。
             optimization {
-                enable = false
+                enable = true
             }
         }
     }

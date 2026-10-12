@@ -78,7 +78,66 @@ buildTypes {
 
 `app/proguard-rules.pro` 也是空的（只有註解）。所以不是規則沒寫對，是**根本沒跑**。
 
-### 為什麼 2026-10-12 當天不處理
+### ✅ 已處理（2026-10-12，`6 (1.0)`）—— 但**必須驗證 keep 規則真的生效**
+
+`5 (1.0)` 於 Oct 12 2:27 PM 審核通過上線之後，直接接著做：
+
+```kotlin
+// AGP 9.3+ 新 DSL
+release {
+    optimization { enable = true }
+}
+```
+
+AGP **9.3+** 的新 DSL 內建一組等同 `proguard-android-optimize.txt` 的預設 keep 規則，
+所以**不需要** `proguardFiles`；自訂規則改放
+`app/src/release/keepRules/*.keep`（**不是** `proguard-rules.pro`）。
+
+#### 🔴 這個 App 特有的風險：R8 會改名 enum 常數
+而這個 App 把 enum 的**名字**寫進資料庫與研究用的 CSV：
+
+| 位置 | enum | 後果 |
+|---|---|---|
+| `SquatTypeConverters` | `DepthFeedback` / `TrainingMode` / `ExerciseType` | `.name` 存進 Room、`valueOf(name)` 讀回 |
+| `SessionExporter` | 同上三個 | 每下紀錄的 CSV 欄位值 |
+| `FrameLogger` | `KeyPointType` | 逐幀 CSV 的**欄位名稱**（`LEFT_HIP_raw_x`…） |
+| `PoseDetectionScreen` | `FlowStep` / `SquatState` / `FramingIssue` | 逐幀 CSV 的 `state` / `framingIssue` |
+
+⚠️ **故障模式是靜默的資料損毀，不是閃退** —— `DepthFeedback` 與 `ExerciseType`
+的 `valueOf` 都有 defensive fallback，被改名時不會丟例外，會**安靜地把每一筆都歸錯類**。
+而逐幀 CSV 的欄位名被改掉的話，`analyze_frames.py` / `analyze_sessions.py` 全部讀不了。
+**這些名字是論文資料的一部分，不只是內部識別字。**
+
+→ `app/src/release/keepRules/squat.keep`：
+```
+-keepclassmembers enum com.heartchen.squat.** { *; }
+```
+
+#### ✅ 出包後**一定要**跑這兩個驗證
+keep 規則路徑若寫錯，R8 會**安靜地忽略**它 —— 所以不能假設有生效。
+
+**1. 看 mapping 檔（30 秒，決定性）**
+```bash
+grep -c "com.heartchen.squat.squat.ExerciseType -> com.heartchen.squat.squat.ExerciseType" \
+  app/build/outputs/mapping/release/mapping.txt
+grep "SQUAT ->\|GREEN ->\|LEFT_HIP ->" app/build/outputs/mapping/release/mapping.txt | head
+```
+- 類別名**沒被改**、常數**沒有 `-> a` 之類的對應** → 規則生效 ✅
+- 看到 `SQUAT -> a` → **規則沒生效，不要上傳**，先修 `.keep` 的路徑
+
+**2. 實機匯出 CSV**
+做幾下 → 匯出 → 看 `exerciseType` 欄是 `SQUAT` 還是 `a`。研究模式的逐幀 CSV
+欄位名也要是 `LEFT_HIP_raw_x` 而不是 `a_raw_x`。
+
+#### 其他要測的（R8 可能弄壞、但會直接出錯比較好發現）
+- CameraX / ML Kit 啟動與偵測（兩者通常自帶 consumer rules）
+- Room 開啟既有資料庫、訓練統計頁讀得到紀錄
+- `SessionExporter` 的 FileProvider 分享不閃退
+
+📝 41MB 大部分是 ML Kit 的模型 asset 不是 DEX，**開 R8 檔案不會瘦很多** ——
+做這件事的理由是 Play 的門檻，不是容量。
+
+### ~~為什麼 2026-10-12 當天不處理~~（已改為當天處理，見上）
 1. `5 (1.0)` 正在審核 —— 插隊要 Remove changes、重出 `6`、再等一輪，
    而當天已經為了 versionCode 繞過一次
 2. **開 R8 會改變執行期行為**，是必須自己跑一輪實機的改動，不是改個旗標
