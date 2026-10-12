@@ -113,6 +113,24 @@ AGP **9.3+** 的新 DSL 內建一組等同 `proguard-android-optimize.txt` 的�
 -keepclassmembers enum com.heartchen.squat.** { *; }
 ```
 
+#### ✅ 驗證結果（2026-10-12）
+`./gradlew bundleRelease` 之後：
+
+```
+app/build/outputs/mapping/release/mapping.txt   327,863 行
+    com.heartchen.squat.pose.KeyPointType  LEFT_HIP    -> LEFT_HIP
+    com.heartchen.squat.squat.DepthFeedback GREEN      -> GREEN
+    com.heartchen.squat.squat.ExerciseType CHAIR_SQUAT -> CHAIR_SQUAT
+    com.heartchen.squat.squat.ExerciseType SQUAT       -> SQUAT
+```
+
+- 32 萬行 mapping → **R8 確實在大量混淆**
+- enum 常數全部對映到自己 → **`src/release/keepRules/*.keep` 這條路徑是對的**，
+  規則生效，靜默資料損毀的風險排除
+
+💡 `./gradlew bundleRelease`（不簽章）就能產生 mapping.txt，
+**不必先走 Generate Signed App Bundle 精靈** —— 驗完再出正式包，省一次白跑。
+
 #### ✅ 出包後**一定要**跑這兩個驗證
 keep 規則路徑若寫錯，R8 會**安靜地忽略**它 —— 所以不能假設有生效。
 
