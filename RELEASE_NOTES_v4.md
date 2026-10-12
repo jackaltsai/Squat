@@ -93,8 +93,13 @@ migration，而它**從未在實機跑過**（見 `RELEASE_CHECKLIST.md`）。
 而 entity 沒有宣告 `@ColumnInfo(defaultValue = ...)`。Room 2.7 **應該**寬容，
 但沒有實測保證，而萬一不是，**每個測試人員第一次開啟就閃退**。
 
-開發機測不到（早就是 v3）。步驟見 `RELEASE_CHECKLIST.md`：
-先裝已發布的 v3 → 做幾下 → 覆蓋安裝 v4 → 匯出全部歷史紀錄。
+**但全新安裝不會跑 migration**（Room 直接建 v3）。若 Play Console 上的有效
+安裝數是 **0**，這一關這次不會被觸發，而且 v4 取代 v3 之後再也沒有裝置拿得到
+v2 —— 風險窗口隨這次發布永久關閉。**先去 Console 確認，不要靠記憶。**
+
+即使是 0，仍建議跑一次：`RELEASE_CHECKLIST.md` 有一個**只用兩個 debug build
+互相覆蓋**的驗法，10~15 分鐘、不碰 Play 也不碰簽章金鑰。
+M5 累積受試者資料會跨好幾個 build，跨版本的資料保存早晚要驗。
 
 ### 建議的發布順序
 `versionCode 4` **先發 internal testing**（比現在的 closed testing 更私密，

@@ -124,8 +124,10 @@ Play Console → Closed testing → Alpha → Testers，看 opted-in 人數。
 `Config`，並新增 5 條測試。**此環境沒有 Android SDK，一行都沒編譯過。**
 出包前的 `./gradlew test` 不是形式 —— 10-05 當天就壞過一次編譯。
 
-### 🔴 必須先驗：Room v2 → v3 的 migration 從未在實機跑過
-已發布版是 **Room v2**，這版是 **v3**。測試人員覆蓋安裝時會跑：
+### 🔴 Room v2 → v3 的 migration 從未在實機跑過
+
+已發布版是 **Room v2**（`c0fe519`，`@Database(version = 2)`），這版是 **v3**。
+從 v2 覆蓋安裝時會跑：
 
 ```kotlin
 ALTER TABLE squat_rep_records ADD COLUMN exerciseType TEXT NOT NULL DEFAULT 'SQUAT'
@@ -133,19 +135,65 @@ ALTER TABLE squat_rep_records ADD COLUMN exerciseType TEXT NOT NULL DEFAULT 'SQU
 
 而 entity 只有 Kotlin 預設值、**沒有 `@ColumnInfo(defaultValue = "SQUAT")`** ——
 也就是「資料庫有 DEFAULT、entity 沒宣告」。Room 2.7 在這個方向上**應該**寬容，
-但沒有實測保證，而萬一不是，**每個測試人員的 App 第一次開啟就 crash**。
+但沒有實測保證，而萬一不是，**裝過舊版的人第一次開啟就 crash**。
 
-⚠️ **開發機測不到這一段** —— 開發機早就是 v3 了，覆蓋安裝不會觸發 2→3。
-必須：
-1. 先安裝**已發布的 `versionCode 3`**（從 Play 內部測試連結或留存的舊 `.aab`）
-2. 做幾下訓練讓資料庫裡有紀錄
-3. 覆蓋安裝新的 `versionCode 4`
-4. 開 App → 選擇動作畫面 →「匯出全部歷史紀錄」
-   - 能開、紀錄筆數沒少、舊紀錄的 `exerciseType` 是 `SQUAT` → 通過
-   - 一開就閃退 → migration 被 Room 擋下，看 logcat 的
-     `Migration didn't properly handle` 訊息再修
+（`RELEASE_CHECKLIST` 上面驗過的是 `MIGRATION_1_2`，**不是這一個**。）
 
-（`RELEASE_CHECKLIST` 第 25 行驗過的是 `MIGRATION_1_2`，**不是這一個**。）
+#### 先問一句：現在有人裝著舊版嗎？
+
+**全新安裝不會跑 migration** —— Room 直接建 v3 的 schema，`MIGRATION_2_3`
+根本不會執行。所以如果**沒有任何裝置上有 v2 的資料庫**，這一關這次就不會被觸發。
+
+而且：**`versionCode 4` 取代 closed testing 上的 v3 之後，任何裝置都再也拿不到
+v2 了。** v2 的族群只會縮小 —— 這個風險窗口**會隨這次發布永久關閉**。
+
+→ 去 Play Console → Testing → Closed testing - Alpha 看**有效安裝數**。
+順便想一下自己：有沒有用 Internal app sharing 裝到過別的手機或平板？
+家人同事的裝置上有沒有？（裝過又解除安裝的沒事，資料庫跟著刪掉了。）
+
+**確認是 0 → 可以直接出包。** 但下面那個測試只要 10~15 分鐘，而且不必碰 Play，
+建議還是跑一次：「現在沒人裝」是靠記憶，下面那個是靠證據。
+而且 M5 累積受試者資料會跨好幾個 build，**跨版本的資料保存早晚要驗，現在最便宜**。
+
+#### ✅ 便宜的驗法：兩個 debug build 互相覆蓋（不需要 Play、不需要簽章金鑰）
+
+`applicationId` 是 `com.heartchen.squat`，debug 沒有 `applicationIdSuffix`，
+所以**兩個 debug build 可以直接覆蓋安裝**（同一把 debug 金鑰）。
+不必從 Play 下載已發布的 release 包。
+
+```bash
+# 0. 先把開發機現有的歷史匯出保存 —— 下一步會把資料庫刪掉
+#    App 裡：選擇動作畫面 →「匯出全部歷史紀錄」→ 分享出來存好
+
+adb uninstall com.heartchen.squat     # 現在是 Room v3，不先刪會因為不允許降版而閃退
+
+git checkout c0fe519                   # 已發布那版，Room v2
+./gradlew installDebug
+#    → 開 App 做幾下深蹲，讓資料庫裡有紀錄（記下做了幾下）
+
+git checkout claude/elderly-exercises-and-stats
+./gradlew installDebug                 # 覆蓋安裝，**這一刻會跑 MIGRATION_2_3**
+
+#    → 開 App → 選擇動作畫面 →「匯出全部歷史紀錄」
+```
+
+| 結果 | 判讀 |
+|---|---|
+| 能開、筆數沒少、舊紀錄的 `exerciseType` 是 `SQUAT` | ✅ 通過 |
+| 一開就閃退 | ❌ migration 被 Room 擋下 —— 看 logcat 的 `Migration didn't properly handle`，多半要在 entity 補 `@ColumnInfo(defaultValue = "SQUAT")` |
+
+⚠️ **開發機直接覆蓋安裝測不到這一段** —— 它早就是 v3 了，所以一定要先
+`adb uninstall` 再裝 v2 的 debug build。那也是為什麼步驟 0 的匯出不能跳過。
+
+⚠️ 測完記得 `git checkout` 回開發分支再出包，不要拿 `c0fe519` 的程式碼去
+Generate Signed App Bundle（那會出一個 `versionCode 3` 的包，Play 會以
+「已存在」退掉，但別靠這個擋）。
+
+#### 替代作法（若想驗真正的發布產物）
+從 Play 的內部測試連結安裝已發布的 `versionCode 3`，做幾下，再用
+Internal app sharing 上傳 `versionCode 4` 的 `.aab` 覆蓋安裝。
+比較貼近真實路徑，但要多繞 Play 一圈，而且 debug 那條驗的是**同一段
+migration 程式碼**。
 
 ### 不需要動的 Play Console 設定
 `AndroidManifest.xml` 與 `3 (1.0)` **逐字相同**（已比對，零差異）：
