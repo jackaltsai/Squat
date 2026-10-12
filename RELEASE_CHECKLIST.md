@@ -53,6 +53,47 @@ Play 不接受重複的 versionCode，所以今天那個包等於白建。
 
 ---
 
+## 📍 Production 的門檻（2026-10-12 於 Play Console 查證）
+
+帳號是 **Personal account**（ChungChen Tsai），所以 2023/11/13 之後個人帳號的
+測試需求**適用**。`Test and release → Production` 是鎖住的。
+
+### 條件與進度都在同一個地方
+**Dashboard → Production 區塊 →「Apply for access to production」**
+（`Test and release → Production` 只會說「你還沒有權限」並把你導去 Dashboard，
+不顯示進度。）
+
+Google 逐字寫的三項：
+
+| | 項目 | 狀態（2026-10-12） |
+|---|---|---|
+| ✅ | ~~Publish a closed testing release~~ | 已完成 |
+| ○ | **Have at least 12 testers opted-in to your closed test** | **0 testers currently opted-in** |
+| ○ | **Run your closed test with at least 12 testers, for at least 14 days** | 未開始 |
+
+`Apply for production` 按鈕在三項都完成前是灰的。
+
+### 🔑 計數器是 0，而作者本人已在 Google Group 裡
+實證了「**加入群組 ≠ 已 opt in**」：群組成員 1 人，但 opted-in 計數是 **0**。
+作者自己也要走完 opt-in 流程（反正要裝下來測 release build 本來就得走）。
+
+→ 招募海報上「第 2 步沒點就不算數，最多人卡在這裡」那句是對的，要留著。
+
+### 申請時要回答問題 —— 先看題目
+那一段還寫著：
+> When you apply, you'll also need to answer some questions about your closed test.
+> **Preview questions**
+
+**14 天開始之前就把題目看過**，這樣期間可以順手收集對的證據（測試人員的回饋、
+你怎麼處理、改了什麼），而不是事後回頭湊。申請是人工審核。
+
+### 實務建議
+- 徵 **15~16 人**而不是剛好 12 —— 有人退出就低於門檻
+- 回饋信箱已設 `hata.s520@gmail.com`，把往返留著當申請佐證
+- 等 `5 (1.0)` 審核通過再發海報：現在測試連結裝到的是 `3 (1.0)`（9/10，只有深蹲）
+
+---
+
 ## 📍 2026-10-12：`5 (1.0)` 已送審（Closed testing - Alpha）
 
 | | |
@@ -386,7 +427,7 @@ Android Studio 出包會**覆蓋**同一個路徑，所以上傳前先看：
 7. Managed publishing 是關閉的，審核通過後會自動生效
 
 ### 尚未勾選的既有待辦
-- [ ] ≥12 人完成 opt-in、連續 14 天（新上傳是否影響計算，以 Play Console 當下條文為準）
+- [ ] ≥12 人完成 opt-in、連續 14 天 —— **已於 2026-10-12 在 Console 查證條文**，見上方「Production 的門檻」一節（目前 0 人 opted-in）
 - [ ] 金鑰檔案、密碼、別名備份到至少兩個安全位置
 
 ### 版本對照
