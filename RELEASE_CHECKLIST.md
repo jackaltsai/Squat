@@ -124,7 +124,38 @@ Play Console → Closed testing → Alpha → Testers，看 opted-in 人數。
 `Config`，並新增 5 條測試。**此環境沒有 Android SDK，一行都沒編譯過。**
 出包前的 `./gradlew test` 不是形式 —— 10-05 當天就壞過一次編譯。
 
-### 🔴 Room v2 → v3 的 migration 從未在實機跑過
+### ✅ 2026-10-12 結案：migration 風險不存在，因為 v2 的族群是空的
+
+查證結果：
+
+| | |
+|---|---|
+| Google Group `squat-coach-testers` 成員 | **1 位 —— 作者本人**（版主，2026/9/10 加入） |
+| 能 opt-in 的人 | opt-in 的前提是群組成員 → **除了作者沒有別人** |
+| 作者的開發機 | 裝的是 **debug 金鑰**簽的 build，與 Play 的 release 簽章**互不相容、無法覆蓋安裝**；9/10 以來數十場實機測試都在這個 build 上 |
+
+→ **沒有任何裝置上有 Room v2 的資料庫，`MIGRATION_2_3` 不會被觸發。**
+
+而 `versionCode 4` 取代 closed testing 上的 `3 (1.0)` 之後，任何裝置都再也拿不到
+v2 —— **這個風險窗口隨這次發布永久關閉。**
+
+#### 但 migration 測試只是延後，不是取消
+`MIGRATION_2_3` 仍然是**未驗證的程式碼**。M5 累積受試者資料會跨好幾個 build，
+而下一次改 schema（v3 → v4）時，**這次沒驗的那段會變成「從 v2 來的人」的必經之路**
+—— 只是現在沒有那種人。做法見下方「便宜的驗法」，10~15 分鐘、不碰 Play。
+
+#### 實際的發布路徑與原本的建議不同
+checklist 原本建議「先發 internal testing」。實際做的是**直接傳到 Closed testing -
+Alpha**，狀態 `4 (1.0)`／**Not yet sent for review**（草稿，什麼都還沒出去）。
+
+**在測試人員是 1 人（自己）的前提下兩者等價**，所以不必改路線。
+internal testing 的價值在「萬一壞掉踩到的是自己不是真實測試人員」，
+而現在真實測試人員本來就只有自己。
+
+⚠️ **上傳 ≠ 發布。** Play Console 的「Not yet sent for review」是草稿狀態，
+要去 **Publishing overview → Send for review** 才會真的送出。
+
+### 🟡 Room v2 → v3 的 migration 從未在實機跑過（這次不受影響，見上）
 
 已發布版是 **Room v2**（`c0fe519`，`@Database(version = 2)`），這版是 **v3**。
 從 v2 覆蓋安裝時會跑：
