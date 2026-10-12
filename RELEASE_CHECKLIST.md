@@ -57,7 +57,7 @@ Play 不接受重複的 versionCode，所以今天那個包等於白建。
 
 | | |
 |---|---|
-| 狀態 | **Running quick checks**（約 13 分鐘）→ 通過後**自動**送進審核 |
+| 狀態 | Quick checks ✅ 已通過 → **In review**（2026-10-12 下午進入審核） |
 | 變更內容 | 一項：Closed testing - Alpha ／ `5 (1.0)` ／ Start full rollout |
 | `.aab` | 今天 14:03 建、41.1 MB（v3 是 24.1MB，差的是 M8 的六張人偶圖） |
 | Previous release `4 (1.0)` | **Not Included** —— 刻意不收進來，那是 10-05 的舊包 |
