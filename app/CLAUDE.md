@@ -169,7 +169,8 @@ UI: Jetpack Compose
 #### 現在卡在哪
 | | 狀態 |
 |---|---|
-| `5 (1.0)` Closed testing | ⏳ **In review**（quick checks 已過；上次約一天） |
+| `5 (1.0)` Closed testing | ✅ **Oct 12 2:27 PM 通過、已上線** |
+| `6 (1.0)`（開啟 R8） | ⏳ **In review** —— keep 規則已用 mapping.txt 驗證生效 |
 | Production 門檻 | **0 / 12** 位 opted-in，14 天未開始 |
 | Managed publishing | off → **審核通過會自動發布**，不用再操作 |
 
@@ -189,11 +190,14 @@ UI: Jetpack Compose
 5. **一次**把 15~16 人湊齊再請他們同時 opt-in（理由見 `RELEASE_CHECKLIST.md`：
    14 天是**每位測試人員各自的連續窗口**，分批招募會把完成日往後推）
 
-#### ⏰ 新待辦：R8 沒開，Play 要求 2027-02 前修
-`optimization { enable = false }` —— 壓縮/混淆全部關閉，Obfuscation 只有 1%
-（門檻 25%）。**不是當天該做的**：`5 (1.0)` 在審核中，而且開 R8 會改變執行期行為，
-要自己跑一輪實機。建議等 `5` 驗完、有已知良好的基準之後再出 `6`。
-詳見 `RELEASE_CHECKLIST.md` 的「DEX code optimization」一節。
+#### ✅ R8 已開（`6 (1.0)`，2026-10-12）
+`5` 通過之後接著做：`optimization { enable = true }`（AGP 9.3 新 DSL），
+自訂 keep 規則放 `app/src/release/keepRules/squat.keep`（**不是** `proguard-rules.pro`）。
+
+那條 keep 規則是**必要的不是保險**：R8 會改名 enum 常數，而這個 App 把 enum 的
+名字寫進 Room 與研究用的 CSV，故障模式是**靜默的資料損毀**。
+已用 `mapping.txt` 驗證生效（32 萬行、enum 常數全部對映到自己）。
+**仍待實機驗證**，清單見 `RELEASE_CHECKLIST.md`。
 
 #### 不必等審核就能做的
 - **先私下問到 15~16 個人點頭**（最不可控、最花時間的一步）
