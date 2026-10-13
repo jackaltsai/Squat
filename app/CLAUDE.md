@@ -170,7 +170,7 @@ UI: Jetpack Compose
 | | 狀態 |
 |---|---|
 | `5 (1.0)` Closed testing | ✅ **Oct 12 2:27 PM 通過、已上線** |
-| `6 (1.0)`（開啟 R8） | ⏳ **In review** —— keep 規則已用 mapping.txt 驗證生效 |
+| `6 (1.0)`（開啟 R8） | ✅ **Oct 13 11:37 AM 通過、已發布** —— 待實機驗證 |
 | Production 門檻 | **0 / 12** 位 opted-in，14 天未開始 |
 | Managed publishing | off → **審核通過會自動發布**，不用再操作 |
 
