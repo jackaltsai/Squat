@@ -170,7 +170,8 @@ UI: Jetpack Compose
 | | 狀態 |
 |---|---|
 | `5 (1.0)` Closed testing | ✅ **Oct 12 2:27 PM 通過、已上線** |
-| `6 (1.0)`（開啟 R8） | ✅ **Oct 13 11:37 AM 通過、已發布** —— 待實機驗證 |
+| `6 (1.0)`（開啟 R8） | 🔴 **啟動就 crash，已退版** —— debug build 正常，根因是 R8 |
+| `7 (1.0)`（退回 `enable = false`） | ⬜ **待出包上傳** —— 內容等同 `5`，只是版本號遞增 |
 | Production 門檻 | **0 / 12** 位 opted-in，14 天未開始 |
 | Managed publishing | off → **審核通過會自動發布**，不用再操作 |
 

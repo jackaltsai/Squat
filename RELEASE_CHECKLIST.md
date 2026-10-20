@@ -250,7 +250,89 @@ Google 逐字寫的三項：
 
 ---
 
-## 📍 2026-10-13：`6 (1.0)`（R8 版）**已發布** ← 現在在這裡
+## 🔴 2026-10-20：`6 (1.0)`（R8 版）實機啟動就 crash → 退回 `7 (1.0)`
+
+### 關鍵對照
+| build | R8 | 結果 |
+|---|---|---|
+| Play 商店下載的 `6 (1.0)` | ✅ 開啟 | **啟動就 crash** |
+| Android Studio 的 debug build | ✗ 不跑 | **完全正常** |
+
+同一份原始碼，差別只在 R8。**根因確定是 R8，不是程式邏輯。**
+
+### Stack trace（混淆後）
+```
+java.lang.NullPointerException: Attempt to invoke virtual method
+    'java.lang.Object yp.d(java.lang.Object)' on a null object reference
+    at y41.<init>(…:9)
+    at lj0.<init>(…:41)
+    at h41.h(…:264)
+    …
+    at mp0.i(…:93)
+    at h4.onMeasure(…:79)
+    at android.view.View.measure(View.java:28708)
+```
+
+**讀得出來的部分**：底部是 `onMeasure`，中間 `op0.g0` / `pk1.b` / `np0.a` / `gg0.d`
+是 Compose 組合器內部 → **第一次組合（在 ComposeView 的 measure 階段）建構某個
+物件時，呼叫了一個 null**。`吃 Object 回 Object` 的簽章在 Kotlin 混淆後
+通常是 `Function1.invoke`，所以很可能是**一個 null 的 lambda 被呼叫**。
+
+⚠️ **確切是哪一個還沒查出來。** 沒有 mapping 還原之前不要猜 ——
+2026-10-12 當天已經因為憑猜測下結論錯過四次。
+
+### 為什麼選擇退版而不是繼續追
+理由是**時程不是技術**：
+
+| | |
+|---|---|
+| R8 的截止 | **2027-02**，還有三個多月 |
+| 已耗掉 | 10/16 → 10/20，**四天** |
+| 當下狀態 | **Play 上那版是壞的**，誰裝誰 crash |
+| 真正的瓶頸 | **12 人 × 14 天的時鐘還沒開始跑** |
+
+每一輪 R8 嘗試的成本是「出包 → 上傳 → 等審核一天 → 安裝 → 測試」。
+而只要 Play 上掛著會 crash 的版本，**招募就不能開始** —— 那是論文的關鍵路徑。
+
+→ `optimization { enable = false }`，`versionCode 7`。
+`app/src/release/keepRules/squat.keep` **刻意留著**：那條 enum 規則本身
+已驗證是對的（mapping 顯示常數全部保留），重試 R8 時還要用。
+
+### 📌 下次重試 R8 的第一步：還原這段 trace
+**不要憑猜測補 keep 規則。** 先用 `6 (1.0)` 那次建置的 `mapping.txt` 還原：
+
+```bash
+# 找 retrace 工具
+find ~/Library/Android/sdk -name "retrace*" -maxdepth 4
+
+# 把 trace 存成 crash.txt，然後
+<retrace 路徑> app/build/outputs/mapping/release/mapping.txt crash.txt
+```
+
+或 Android Studio：`Analyze → Analyze Stack Trace`，貼上 trace 並指定 mapping 檔。
+
+⚠️ **mapping.txt 必須是 `6 (1.0)` 那一次建置產生的那一份**
+（trace 裡的 `r8-map-id-1c494945e10bf10ce1b3b5c4a77ad160b9e3b38ca11af90d4ec12eff1b19f6f1`
+就是它的識別碼）。之後任何一次 `bundleRelease` 都會覆蓋掉 ——
+**要留的話現在就把它複製出來**：
+
+```bash
+cp app/build/outputs/mapping/release/mapping.txt ~/mapping-v6-r8.txt
+```
+
+拿到真實類別名之後，再決定是補 keep 規則、還是用 `-dontoptimize` 之類的局部退讓。
+
+### 重試時建議的做法
+**不要再用 Play 的審核當測試迴圈。** 下次要驗 R8，用
+`./gradlew installRelease`（或手動安裝 release APK）直接裝到手機上測 ——
+省掉「上傳→審核一天」那一段。確認能跑之後才出包上傳。
+
+> 這次之所以繞遠路，是因為把「驗證 R8 能不能跑」和「發布」綁在同一個迴圈裡。
+> R8 是**本機就能驗**的東西。
+
+---
+
+## 📍 2026-10-13：`6 (1.0)`（R8 版）**已發布** —— ⚠️ 會 crash，已退版，見上
 
 提交記錄（Publishing overview → Submission activity）：
 
