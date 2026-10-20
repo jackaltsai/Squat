@@ -1277,3 +1277,33 @@ Play 不會管這一塊，但論文口試會問。
 - `release` buildType 的 R8/ProGuard 仍關閉（`optimization.enable = false`）
 - 商店文案未經母語人士潤稿
 - 金鑰備份到第二個安全位置 —— **尚未確認完成**（第 2 節）
+
+---
+
+## 📌 `7 (1.0)` 上傳時的兩個警告，以及為什麼只有一個需要在意
+
+### ✅「DEX code optimization is below our threshold」消失了
+`5` 與 `6` 的上傳頁都掛著這個（Obfuscation 1%，門檻 25%，Fix by Feb 2027）。
+`7` 的 Create release 預覽頁**只剩一個警告**，而且是別的。
+⚠️ 那個 DEX 警告原本出現在 **Test and release** 那一頁，不是 Create release 的預覽頁 ——
+**確認要回那一頁（或 App bundle explorer）看**，不要只憑這一頁就結案。
+我們自己量到 97.7%，但判定是 Play 做的。
+
+### ⚠️「This App Bundle contains native code, and you've not uploaded debug symbols」
+**修不了，也不用修。** 那個 native code 是 **ML Kit 的 `.so`**
+（`pose-detection-accurate` 帶的原生推論函式庫），不是專案的程式碼。
+
+AGP 的 `ndk { debugSymbolLevel = "FULL" }` 只對**專案自己用 NDK/CMake 編出來的**
+原生程式碼有效，對 AAR 裡的預編譯 `.so` 無能為力 —— 這個專案一行 C/C++ 都沒有，
+設了那個選項不會有任何效果。
+
+實質影響只有一個：**若 crash 發生在 ML Kit 的原生層，Play 的報告會是沒有符號的位址。**
+Kotlin 層的 crash（唯一我們能處理的那種）照樣有 `mapping.txt` 可還原 ——
+`6 (1.0)` 那次就是這樣查出 `PoseDetectorImpl.<init>` 的。
+
+> 📌 下次看到這個警告不要再查一次。它是 ML Kit 的既有性質，不是迴歸。
+
+### ✅ 支援裝置一個都沒少
+Phone 12,146 / Tablet 6,476 / TV 5，`Devices no longer supported` 整欄是 **0**。
+**這在開了 R8 的版本上特別值得看** —— 壓縮階段若動到 manifest 的功能宣告，
+會靜默地排除掉一批裝置。沒有發生。
