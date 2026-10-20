@@ -161,7 +161,34 @@ UI: Jetpack Compose
 不允許資料庫降版而閃退，屆時只能解除安裝（會清掉本機歷史紀錄）。切分支前先用
 「匯出全部歷史紀錄」備份 CSV。
 
-### 📍 下次接續（2026-10-12 收工，`9664aba`）
+### 📍 下次接續（2026-10-20，`e1309c3`）
+
+**R8 修好了，可以出 `7 (1.0)`。** 根因是 R8 full mode 破壞 ML Kit 的
+`ComponentRegistrar` 探索（`AndroidManifest` 的 `<meta-data>` + `Class.forName`，
+R8 看不到那條引用鏈），**不在專案程式碼裡**；修法是 `gradle.properties` 加一行
+`android.enableR8.fullMode=false`。完整證據鏈與 debug+R8 的驗證迴圈寫在
+`RELEASE_CHECKLIST.md`。
+
+#### 出包前還剩兩件（都在 debug+R8 的 build 上做，一次跑完）
+- [ ] **逐幀 CSV 的欄位名**：開研究模式錄 30 秒，確認表頭是 `LEFT_HIP_raw_x`
+      而不是 `a_raw_x`。這是 keep 規則保護的最後一處
+      （`FrameLogger` 用 `KeyPointType.name` 當欄位名），而 10-20 那場
+      只傳了 session CSV。session 的 `exerciseType` / `mode` / `feedbackColor`
+      三個 enum 都沒被改名，所以**預期會過**，但這是論文的原始資料，值得看一眼。
+- [ ] 兩位數次數不壓停止鍵（10-20 那場深蹲做到 13 下，應該已經看到了，
+      只是沒有明確確認）；高抬腿站太近 →「請往後站」
+
+#### 然後
+1. `./gradlew test`（107 條）→ `./gradlew bundleRelease` → 上傳 `7 (1.0)`
+2. **量真實混淆率**：`app/build/outputs/mapping/release/mapping.txt`
+   —— ⚠️ 不要用 debug 的 mapping（實測只改名 0.5%）
+3. 看 Play 的「DEX code optimization」警告消失沒有
+4. 審核通過 → 自己 opt-in 看計數器 0→1 → 招募 15~16 人**同一天**全部 opt-in
+5. 點 Dashboard 的 `Preview questions`，先知道申請 Production 會被問什麼
+
+---
+
+### 📍 上一個接續點（2026-10-12 收工，`9664aba`）
 
 **等 `5 (1.0)` 審核通過。** 工作區乾淨，16 個 commit 全部已推。
 資料庫仍是 Room v3，覆蓋安裝即可。測試 **107 條**（`./gradlew test` 已驗過）。
@@ -170,8 +197,9 @@ UI: Jetpack Compose
 | | 狀態 |
 |---|---|
 | `5 (1.0)` Closed testing | ✅ **Oct 12 2:27 PM 通過、已上線** |
-| `6 (1.0)`（開啟 R8） | 🔴 **啟動就 crash，已退版** —— debug build 正常，根因是 R8 |
-| `7 (1.0)`（退回 `enable = false`） | ⬜ **待出包上傳** —— 內容等同 `5`，只是版本號遞增 |
+| `6 (1.0)`（開啟 R8） | 🔴 **啟動就 crash** —— 根因 **R8 full mode** 破壞 ML Kit 的元件註冊 |
+| R8 修法 | ✅ `android.enableR8.fullMode=false`，**debug+R8 六動作實機通過** |
+| `7 (1.0)`（含 R8） | ⬜ **待出包上傳** —— `release` 的 `enable` 已開回 `true`、debug 診斷區塊已刪 |
 | Production 門檻 | **0 / 12** 位 opted-in，14 天未開始 |
 | Managed publishing | off → **審核通過會自動發布**，不用再操作 |
 
