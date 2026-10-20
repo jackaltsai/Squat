@@ -375,6 +375,20 @@ java.lang.NullPointerException: Attempt to invoke virtual method
 `ComponentRegistrar` 的實作類別只被 `AndroidManifest.xml` 的 `<meta-data>` 引用、
 靠 `Class.forName` 反射載入，R8 看不到那條引用鏈。
 
+#### ⏳ 這個修法有保存期限：AGP 10 會移除這個旗標
+2026-10-20 本機建置印出：
+
+```
+WARNING: The option setting 'android.enableR8.fullMode=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+```
+
+目前是 AGP 9.3.1，仍然有效。**但升級到 AGP 10 之前必須先解決根因** ——
+否則這一行被忽略、App 直接回到「Play 版啟動就 crash」，而且只在實機上出現
+（Studio 的 debug build 不會），很容易被誤判成別的問題。
+升級前的三個步驟（照成本排序）寫在 `gradle.properties` 那一行的註解裡。
+
 #### 修法：`android.enableR8.fullMode=false`（一行）
 AGP 8 以後 full mode 預設開啟，做更激進的優化 ——
 **破壞 Firebase / ML Kit 的元件探索是它最有名的副作用。**
