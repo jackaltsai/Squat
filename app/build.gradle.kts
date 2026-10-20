@@ -21,53 +21,41 @@ android {
     }
 
     buildTypes {
-        // ⚠️⚠️ 診斷用，**修好 R8 之後要刪掉** ⚠️⚠️
-        //
-        // 2026-10-20：`6 (1.0)` 開了 R8 之後實機啟動就 crash，而 debug build
-        // （不跑 R8）正常。先前是把「驗證 R8」綁進 Play 的發布迴圈 ——
-        // 每試一次要「出包→上傳→等審核一天→安裝→測試」，四天只試了一次。
-        //
-        // 在 debug 也開 R8，就能用 `./gradlew installDebug` 兩分鐘跑完一輪，
-        // 完全不碰 Play。debug 用 debug 金鑰自動簽章，也不會誤傳上去。
-        //
-        // 💡 Android Studio 會用本機的 mapping 檔**自動還原** Logcat 的 stack trace，
-        // 所以這樣抓到的 trace 可能直接就是真實類別名，不必手動 retrace。
-        //
-        // mapping 檔在 app/build/outputs/mapping/debug/mapping.txt
-        debug {
-            optimization {
-                enable = true
-            }
-        }
-
         release {
             // Play Console 的「DEX code optimization is below our threshold」
             // （Obfuscation 1%，門檻 25%，Fix by Feb 2027）就是因為這裡原本是 false ——
             // 壓縮/混淆/優化整個沒跑。
             //
-            // ⚠️ **2026-10-20 退回 false** —— `enable = true` 的 `6 (1.0)` 在實機
-            // **啟動就 crash**，而 debug build（不跑 R8）同一份原始碼完全正常。
+            // 🔴 2026-10-20：`6 (1.0)` 開了這個之後**實機啟動就 crash**。
+            // 根因不在專案程式碼裡，而是 **R8 full mode**（AGP 8 以後預設開啟）
+            // 破壞了 ML Kit 的元件註冊機制：
             //
             // ```
-            // NullPointerException: 'java.lang.Object yp.d(java.lang.Object)'
-            //                        on a null object reference
-            //     at y41.<init> … at h4.onMeasure → View.measure
+            // NullPointerException: 'LazyInstanceMap.get(Object)' on a null object reference
+            //     at PoseDetectorImpl.<init>  ← PoseDetection.getClient
+            //     ← PoseAnalyzer.<init>(PoseAnalyzer.kt:21)
             // ```
-            // 底部是 onMeasure、中間是 Compose 組合器內部 —— 第一次組合時建構某個
-            // 物件呼叫了 null（`吃 Object 回 Object` 的簽章通常是 Function1.invoke）。
-            // **確切是哪一個還沒查出來**（需要用 mapping.txt 還原）。
             //
-            // 退版的理由是時程不是技術：R8 的截止是 **2027-02**（還有三個多月），
-            // 而 Play 上掛著會 crash 的版本就**不能開始招募**，
-            // 12 人 × 14 天的時鐘才是論文的關鍵路徑。每一輪 R8 嘗試都要
-            // 「出包→上傳→等審核一天→安裝→測試」，10/16~10/20 已經耗掉四天。
+            // ML Kit 沿用 Firebase 的 `ComponentRegistrar`：實作類別只被
+            // `AndroidManifest.xml` 的 `<meta-data>` 引用、靠 `Class.forName` 載入，
+            // R8 看不到那條引用鏈。**修法在 `gradle.properties`：
+            // `android.enableR8.fullMode=false`**（一行）。
             //
-            // 📌 重試時的下一步寫在 `RELEASE_CHECKLIST.md`：先用 mapping.txt
-            // retrace 這段 trace 拿到真實類別名，不要再憑猜測補 keep 規則。
-            //    `app/src/release/keepRules/squat.keep` **刻意留著** ——
-            //    那條 enum 規則本身驗證過是對的（mapping 顯示常數全部保留）。
+            // ⚠️ **不是因為 ML Kit 被改名。** 實測 release 的 mapping 裡
+            // ML Kit 的類別一個都沒被改名（它自己附的 consumer keep 規則在保護），
+            // 所以壞掉的是 full mode 更激進的**優化**，不是混淆。
+            // 也因此**不要**改成 keep 整個 `com.google.mlkit.**` ——
+            // 那會讓 DEX 的大宗完全不混淆，很可能還是過不了 Play 的 25% 門檻。
+            //
+            // 📌 驗證迴圈：在 `debug` 也開 `optimization { enable = true }`，
+            // 用 `./gradlew installDebug` 兩分鐘跑一輪，完全不碰 Play
+            // （Android Studio 會用本機 mapping 自動還原 Logcat 的 trace）。
+            // 把 R8 的驗證綁進 Play 的發布迴圈會變成一天一次 —— 10/16~10/20 就是這樣耗掉的。
+            //
+            // ✅ 2026-10-20 debug+R8 六動作實機通過：啟動正常、六個動作都計得到、
+            //    `exerciseType` 欄完全沒被混淆、膝內夾閘門正確、分級邏輯全符。
             optimization {
-                enable = false
+                enable = true
             }
         }
     }
