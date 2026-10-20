@@ -348,6 +348,7 @@ def main():
     print("\n\n=== 全部場次摘要 ===")
     rows = []
     for name, d in sessions:
+        summary_pv = d.loc[d["feedbackColor"] != "SUSPECT", "depthRatio"]
         row = {
             "場次": name,
             "動作": (
@@ -357,10 +358,15 @@ def main():
             ),
             "模式": d["mode"].iloc[0],
             "次數": len(d),
-            # 與上面逐場的統計用同一個 pv（已排除未評級），否則同一份輸出裡
-            # 同一個量會出現兩個數字 —— 這個工具在 10-02 就犯過一次。
-            "p平均": round(pv.mean(), 3) if len(pv) else float("nan"),
-            "p標準差": round(pv.std(), 3) if len(pv) else float("nan"),
+            # ⚠️ 這裡**必須自己重算** pv。上面逐場那段是**另一個迴圈**
+            # （247 行印逐場、350 行建摘要表），直接用 `pv` 會拿到前一個迴圈
+            # 最後一次疊代的殘留值 —— 2026-10-20 實測：六場的 p平均 全部印成
+            # 最後一場（擴胸）的 1.703，而逐場區塊印的是對的。
+            #
+            # 這是「同一個量出現兩個數字」的變形：上次修的是公式不一致，
+            # 這次是**作用域假設錯誤**。排除未評級的規則要和上面一致。
+            "p平均": round(summary_pv.mean(), 3) if len(summary_pv) else float("nan"),
+            "p標準差": round(summary_pv.std(), 3) if len(summary_pv) else float("nan"),
             "膝內夾": int(d["kneeValgus"].sum()),
         }
         if has_raw and d["duser"].notna().any():

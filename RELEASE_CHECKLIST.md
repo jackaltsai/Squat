@@ -250,6 +250,77 @@ Google 逐字寫的三項：
 
 ---
 
+### ✅ 2026-10-20：R8 的 crash 修好了 —— 關掉 full mode
+
+#### 本機迴圈：一天 → 兩分鐘
+在 `debug` build type 也開 `optimization { enable = true }`，用
+`./gradlew installDebug` 直接裝。**Android Studio 會用本機的
+`mapping/debug/mapping.txt` 自動還原 Logcat 的 stack trace**，所以一次就拿到真實類別名。
+
+#### 根因：ML Kit 的元件圖被 R8 full mode 弄壞
+```
+java.lang.NullPointerException: Attempt to invoke virtual method
+  'java.lang.Object com.google.mlkit.common.sdkinternal.LazyInstanceMap.get(java.lang.Object)'
+  on a null object reference
+    at com.google.mlkit.vision.pose.internal.PoseDetectorImpl.<init>(pose-detection-common@@18.0.0-beta5:1)
+    at com.google.mlkit.vision.pose.PoseDetection.getClient(...)
+    at com.heartchen.squat.pose.PoseAnalyzer.<init>(PoseAnalyzer.kt:21)
+    at …PoseDetectionScreen.kt:442 (DisposableEffect.onRemembered)
+```
+
+**不在專案程式碼裡。** ML Kit 沿用 Firebase 的元件註冊機制，
+`ComponentRegistrar` 的實作類別只被 `AndroidManifest.xml` 的 `<meta-data>` 引用、
+靠 `Class.forName` 反射載入，R8 看不到那條引用鏈。
+
+#### 修法：`android.enableR8.fullMode=false`（一行）
+AGP 8 以後 full mode 預設開啟，做更激進的優化 ——
+**破壞 Firebase / ML Kit 的元件探索是它最有名的副作用。**
+
+⚠️ **不是因為 ML Kit 被改名。** 實測
+`grep "^com.google.mlkit" mapping.txt | grep -v "-> com.google.mlkit"` 是**空的** ——
+ML Kit 的類別本來就一個都沒被改名（它自己附的 consumer keep 規則在保護）。
+所以壞掉的是 full mode 更激進的**優化**（內聯、刪掉它以為沒用的欄位初始化），
+不是混淆。這也是為什麼**不需要** keep 整個 `com.google.mlkit.**` ——
+那樣做會讓 DEX 的大宗完全不混淆，很可能還是過不了 Play 的 25% 門檻。
+
+#### ✅ 功能驗證（debug+R8 build，六動作實機）
+| | 結果 |
+|---|---|
+| 啟動 | ✅ 不 crash |
+| 六個動作都偵測得到 | ✅ 13 / 3 / 4 / 4 / 4 / 5 下 |
+| `exerciseType` 欄 | ✅ `SQUAT` / `CHAIR_SQUAT` / `HIGH_KNEES` / `HEEL_RAISE` / `ARM_RAISE` / `CHEST_EXPANSION`，**一個都沒被混淆** |
+| 膝內夾閘門 | ✅ 深蹲家族有值、其餘四個寫 null |
+| 分級邏輯 | ✅ 六場全部相符 |
+| Duser 數量 | ✅ 高抬腿 2 個（左右腳 0.58049 / 0.57975，差 0.13%） |
+| 分享 CSV（FileProvider） | ✅ 能匯出（這份資料就是） |
+
+**仍待確認**：逐幀 CSV 的欄位名、訓練統計頁讀既有紀錄、
+兩位數次數不壓停止鍵、高抬腿的距離提示。
+
+⚠️ **混淆率不能用 debug 的 mapping 量**：debug build 幾乎不混淆
+（實測 9894 個類別對映只改名 52 個 = 0.5%）。release 版的 mapping 有 32 萬行，
+那才是真實規模。**Play 的 25% 門檻過不過，要等 `7 (1.0)` 上傳後看警告消失沒有。**
+
+#### 📊 順帶一個對論文有用的發現：站姿校正的重現性真的改善了
+兩個上肢動作各自反推「手臂長 ÷ 肩寬」——**同一個解剖量、兩個不同動作量到的**：
+
+| | 雙臂高舉 | 擴胸推掌 | 差距 |
+|---|---|---|---|
+| 2026-10-20 | **1.434** | **1.399** | **2.5%** |
+| 先前（擴胸三場） | 1.348~1.409 | 0.962 / 1.069 / 1.180 / 1.409 | 最差 8 倍（σ 0.018 vs 0.142） |
+
+10-05 那個 UI 修正（站姿校正時**先講、而且用最大字講該擺的姿勢**，
+不要讓 `exercise.guidance` 搶走注意力）**看起來生效了**。
+這一場兩個動作互相印證到 2.5% 以內，是目前最好的一次。
+
+同一場的其他指標也是歷來最好：雙臂高舉 p 的 CV **1.1%**（先前最好 1.34%）、
+高抬腿左右腳判準差 **0.13%**（先前 0.6% / 2.2%）。
+
+> ⚠️ n=1，不要當成定論。但方向一致，而且是**事前預測、事後驗證**的那種證據
+> （修正的理由是「畫面誘導使用者擺錯姿勢」，預測是「改掉之後兩個動作會一致」）。
+
+---
+
 ## 🔴 2026-10-20：`6 (1.0)`（R8 版）實機啟動就 crash → 退回 `7 (1.0)`
 
 ### 關鍵對照
