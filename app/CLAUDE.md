@@ -169,17 +169,30 @@ R8 看不到那條引用鏈），**不在專案程式碼裡**；修法是 `gradl
 `android.enableR8.fullMode=false`。完整證據鏈與 debug+R8 的驗證迴圈寫在
 `RELEASE_CHECKLIST.md`。
 
-#### 出包前還剩兩件（都在 debug+R8 的 build 上做，一次跑完）
-- [ ] **逐幀 CSV 的欄位名**：開研究模式錄 30 秒，確認表頭是 `LEFT_HIP_raw_x`
-      而不是 `a_raw_x`。這是 keep 規則保護的最後一處
-      （`FrameLogger` 用 `KeyPointType.name` 當欄位名），而 10-20 那場
-      只傳了 session CSV。session 的 `exerciseType` / `mode` / `feedbackColor`
-      三個 enum 都沒被改名，所以**預期會過**，但這是論文的原始資料，值得看一眼。
-- [ ] 兩位數次數不壓停止鍵（10-20 那場深蹲做到 13 下，應該已經看到了，
-      只是沒有明確確認）；高抬腿站太近 →「請往後站」
+#### ✅ R8 的驗證已經完成
+- [x] **逐幀 CSV 的欄位名** —— 2912 幀，表頭是 `LEFT_HIP_raw_x` 等 85 欄，
+      `KeyPointType` / `ExerciseType` / `FlowStep` / `SquatState` / `FramingIssue`
+      五個 enum 的名字一個都沒被改。keep 規則實機生效。
+- [x] **高抬腿站太近 →「請往後站」** —— 站姿校正 `TOO_CLOSE` 12 幀、
+      訓練中 60 幀 + `MISSING_ANKLE` 48 幀，兩條路都走到。
+- [ ] 兩位數次數不壓停止鍵（10-20 兩場分別做到 13 下與 16 下，應該已經看到了，
+      只是**沒有明確確認過**）
+
+#### 🔴 但那份逐幀資料抓到一個真的 bug（已修，待本機驗測）
+站姿校正接受了**解剖學上不可能**的量測：`duser` = 0.869（大腿/腿長），
+先前七場是 0.488~0.581。根因是站姿校正跑在使用者還站太近時，
+78 幀裡只有 9 幀三組關鍵點都達信心門檻，而那 9 幀的腳踝是 ML Kit **高信心猜錯**的
+（有幀把膝報在踝下面）。後果：兩台狀態機各有一半以上時間卡在 UP、
+40 秒不計次，整場 16 下的 p 全部無意義。
+
+→ 新增 `isPlausibleThighToLeg`（0.40~0.70，從 crural index 推導），
+與上肢的 `isPlausibleArmToShoulder` 完全同構。**深蹲家族刻意沒套**（無證據，有測試鎖住）。
+完整證據鏈、以及「為什麼幀數不能當判據」寫在 `RELEASE_CHECKLIST.md`。
+
+**測試 107 → 110。本機還沒跑過 `./gradlew test`，這是出 `7` 前的第一件事。**
 
 #### 然後
-1. `./gradlew test`（107 條）→ `./gradlew bundleRelease` → 上傳 `7 (1.0)`
+1. `./gradlew test`（**110 條**，新增的三條沒編譯過）→ `./gradlew bundleRelease` → 上傳 `7 (1.0)`
 2. **量真實混淆率**：`app/build/outputs/mapping/release/mapping.txt`
    —— ⚠️ 不要用 debug 的 mapping（實測只改名 0.5%）
 3. 看 Play 的「DEX code optimization」警告消失沒有

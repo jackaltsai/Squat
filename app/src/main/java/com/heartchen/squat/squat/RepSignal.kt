@@ -471,6 +471,17 @@ class HighKneesStandCalibrator : StandCalibrator {
         val rightKneeY = rightKneeSum / sampleCount
         // 站姿時膝必須確實低於髖，否則判準會是 0 或負數。
         if (leftKneeY <= hipY || rightKneeY <= hipY) return emptyList()
+        // 兩側的判準都必須是解剖學上可能的大腿/腿長比例。
+        //
+        // 擋的不是使用者的身材，是**腳踝被量錯**：站太近時腳踝落在畫面下緣附近，
+        // ML Kit 會給出高信心值卻把它猜在偏高的位置，於是分母（腿長）偏小、
+        // 比值憑空變大。2026-10-20 實機量到 0.869，整場 16 下的 p 全部無意義。
+        // 兩側一起擋 —— 可疑的量是共用的那個 `scale`，不是單邊的膝。
+        if (strict && !(isPlausibleThighToLeg((leftKneeY - hipY) / scale) &&
+                isPlausibleThighToLeg((rightKneeY - hipY) / scale))
+        ) {
+            return emptyList()
+        }
         return listOf(
             HighKneeSignal(KeyPointType.LEFT_KNEE, leftKneeY, hipY, scale),
             HighKneeSignal(KeyPointType.RIGHT_KNEE, rightKneeY, hipY, scale),
@@ -596,6 +607,16 @@ internal fun isPlausibleToeToHip(ratio: Float): Boolean =
  */
 internal fun isPlausibleArmToShoulder(ratio: Float): Boolean =
     ratio in Config.CALIBRATION_MIN_ARM_TO_SHOULDER..Config.CALIBRATION_MAX_ARM_TO_SHOULDER
+
+/**
+ * 站姿校正量到的「大腿長 ÷ 腿長」是否落在解剖學合理區間。
+ *
+ * 理由與區間的推導寫在 [Config.CALIBRATION_MIN_THIGH_TO_LEG]。
+ * 一句話：2026-10-20 那場在站太近、腳踝被畫面下緣裁掉時量到 0.869
+ * （其中有幀把膝報在踝下面），`duser` 與整場 16 下的 p 全部無意義。
+ */
+internal fun isPlausibleThighToLeg(ratio: Float): Boolean =
+    ratio in Config.CALIBRATION_MIN_THIGH_TO_LEG..Config.CALIBRATION_MAX_THIGH_TO_LEG
 
 /**
  * 取得動作對應的站姿校正累加器。

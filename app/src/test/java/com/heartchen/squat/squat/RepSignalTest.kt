@@ -505,6 +505,69 @@ class RepSignalTest {
         assertTrue(c.build().isEmpty())
     }
 
+    /**
+     * 高抬腿的判準（寫進 CSV 的 `duser`）是站姿量到的「大腿長 ÷ 腿長」，
+     * 直接當每一下的分母。2026-10-20 實機在站太近、腳踝被畫面下緣裁掉時量到
+     * **0.869** —— 那 78 幀裡三組關鍵點都可信的只有 9 幀，而 ML Kit 給了
+     * 0.858 的信心值卻把腳踝猜在比實際高 130px 的位置（有幀甚至把膝報在踝下面，
+     * 比值 1.079）。結果整場 16 下的 p 全部無意義。
+     *
+     * 區間從解剖學推導（crural index 0.78~0.89 → 0.529~0.562，再放寬到 0.40~0.70），
+     * 不是從實測分布配出來的。
+     */
+    @Test
+    fun `站姿校正會擋掉解剖學上不合理的大腿腿長比`() {
+        // 七個場次實測的 duser（含倒數期間重算的 0.5186）都該通過
+        listOf(0.4880f, 0.5186f, 0.5389f, 0.5427f, 0.5457f, 0.5510f, 0.5797f, 0.5805f)
+            .forEach { assertTrue("$it 應視為合理", isPlausibleThighToLeg(it)) }
+        // 2026-10-20 那場的兩個 duser、那場逐幀的中位數與「膝在踝下面」的極值都該被擋
+        listOf(0.8377f, 0.8686f, 0.8879f, 1.079f)
+            .forEach { assertTrue("$it 應被擋掉", !isPlausibleThighToLeg(it)) }
+    }
+
+    @Test
+    fun `大腿腿長比不合理時拒絕產生訊號，但放寬後照收`() {
+        // 腳踝被猜在比實際高的位置：髖 600、膝 800、踝 830
+        // → 大腿/腿長 = 200/230 = 0.870，正是 2026-10-20 實機記到的那個值
+        val bad = mapOf(
+            KeyPointType.LEFT_HIP to KeyPoint(KeyPointType.LEFT_HIP, 330f, hkHipY, 0.9f),
+            KeyPointType.RIGHT_HIP to KeyPoint(KeyPointType.RIGHT_HIP, 390f, hkHipY, 0.9f),
+            KeyPointType.LEFT_KNEE to KeyPoint(KeyPointType.LEFT_KNEE, 330f, hkKneeY, 0.9f),
+            KeyPointType.RIGHT_KNEE to KeyPoint(KeyPointType.RIGHT_KNEE, 390f, hkKneeY, 0.9f),
+            KeyPointType.LEFT_ANKLE to KeyPoint(KeyPointType.LEFT_ANKLE, 330f, hkHipY + 230f, 0.9f),
+            KeyPointType.RIGHT_ANKLE to KeyPoint(KeyPointType.RIGHT_ANKLE, 390f, hkHipY + 230f, 0.9f),
+        )
+        val c = HighKneesStandCalibrator()
+        repeat(5) { c.accumulate(bad) }
+        assertTrue("嚴格模式應拒絕", c.build().isEmpty())
+        // 放寬後照收兩個訊號（與手臂動作同樣的取捨：卡在校正出不去更糟）
+        assertEquals("放寬後應照收", 2, c.build(strict = false).size)
+    }
+
+    @Test
+    fun `深蹲家族不套大腿腿長比檢查`() {
+        // 同一組「腳踝被猜太高」的站姿量測，深蹲的站姿校正仍然照常建立訊號 ——
+        // 深蹲沒有任何實測證據出現過這個失效模式，而它已驗證數週。
+        // 這條測試鎖住範圍，避免哪天「看起來對稱」就順手一起改。
+        val c = standCalibratorFor(ExerciseType.SQUAT)!!
+        repeat(5) {
+            c.accumulate(
+                mapOf(
+                    KeyPointType.LEFT_HIP to KeyPoint(KeyPointType.LEFT_HIP, 330f, hkHipY, 0.9f),
+                    KeyPointType.RIGHT_HIP to KeyPoint(KeyPointType.RIGHT_HIP, 390f, hkHipY, 0.9f),
+                    KeyPointType.LEFT_KNEE to KeyPoint(KeyPointType.LEFT_KNEE, 330f, hkKneeY, 0.9f),
+                    KeyPointType.RIGHT_KNEE to
+                        KeyPoint(KeyPointType.RIGHT_KNEE, 390f, hkKneeY, 0.9f),
+                    KeyPointType.LEFT_ANKLE to
+                        KeyPoint(KeyPointType.LEFT_ANKLE, 330f, hkHipY + 230f, 0.9f),
+                    KeyPointType.RIGHT_ANKLE to
+                        KeyPoint(KeyPointType.RIGHT_ANKLE, 390f, hkHipY + 230f, 0.9f),
+                )
+            )
+        }
+        assertEquals(1, c.build().size)
+    }
+
     // 模擬 25fps 的交替踏步：每腳抬 10 幀、休息 10 幀（每腳 0.8 秒）。
     // 關鍵是**一腳抬的時候另一腳在地上**，兩腳的半波連續鋪滿、中間沒有雙腳落地的空檔。
     private val hkLiftFrames = 10
