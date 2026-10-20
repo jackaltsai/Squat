@@ -353,6 +353,44 @@ ML Kit 在腳踝被下緣裁掉時會**高信心地猜錯位置**，而累加器
 
 ---
 
+### ✅ 2026-10-20：release 版實測混淆率 **97.7%**（門檻 25%）
+
+`./gradlew bundleRelease` 之後量 `app/build/outputs/mapping/release/mapping.txt`：
+
+| | release | debug |
+|---|---|---|
+| mapping 行數 | **349,108** | — |
+| 類別對映 | 7,517 | 9,894 |
+| 被改名 | **7,346（97.7%）** | 52（**0.5%**） |
+
+⚠️ **debug 的 mapping 不能用來量混淆率。** 10-20 當天我先叫人量了 debug 那份，
+得到 0.5%，差點據此判斷「R8 沒跑」。debug build 幾乎不混淆是正常的，
+門檻要看的是 release。
+
+而 keep 規則在 release 版同樣生效 —— enum 常數全部對映到自己：
+
+```
+com.heartchen.squat.pose.KeyPointType LEFT_HIP -> LEFT_HIP
+com.heartchen.squat.squat.DepthFeedback GREEN -> GREEN
+com.heartchen.squat.squat.ExerciseType CHAIR_SQUAT -> CHAIR_SQUAT
+com.heartchen.squat.squat.TrainingMode BEGINNER -> BEGINNER
+```
+
+**97.7% 遠高於 25%，所以 Play 那個「DEX code optimization is below our threshold」
+警告應該會在 `7 (1.0)` 上傳後消失。** 門檻過不過最終由 Play 判定，
+這個數字是旁證不是結論。
+
+#### ⚠️ `./gradlew bundleRelease` 出來的 .aab **不能上傳**
+`app/build.gradle.kts` **沒有任何 `signingConfig`** —— 金鑰在使用者的 Mac 上由
+Studio 管理，所以 `bundleRelease` 產出的是未簽章的 bundle，Play 會退件。
+出包一律走 **Build → Generate Signed App Bundle**（`5`、`6` 都是這樣出的）。
+那條路同樣會跑 R8、同樣會重新產生 mapping，設定相同所以混淆率一致。
+
+📌 `bundleRelease` 仍然有用：它是**不用簽章就能量混淆率、確認 keep 規則生效**的
+最快方式，而且會把上一份 mapping 覆蓋掉 —— 要保留某個版本的 mapping 就先複製出去。
+
+---
+
 ### ✅ 2026-10-20：R8 的 crash 修好了 —— 關掉 full mode
 
 #### 本機迴圈：一天 → 兩分鐘
