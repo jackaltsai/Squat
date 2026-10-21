@@ -212,7 +212,7 @@ R8 看不到那條引用鏈），**不在專案程式碼裡**；修法是 `gradl
 | `5 (1.0)` Closed testing | ✅ **Oct 12 2:27 PM 通過、已上線** |
 | `6 (1.0)`（開啟 R8） | 🔴 **啟動就 crash** —— 根因 **R8 full mode** 破壞 ML Kit 的元件註冊 |
 | R8 修法 | ✅ `android.enableR8.fullMode=false`，**debug+R8 六動作實機通過** |
-| `7 (1.0)`（含 R8） | 🕐 **2026-10-20 已送審**（Closed testing - Alpha，Start full rollout） |
+| `7 (1.0)`（含 R8） | ✅ **2026-10-20 11:27 PM 通過、已上線**（Available to selected testers） |
 | release 混淆率 | ✅ **97.7%**（7346/7517 類別，門檻 25%），enum 常數全部對映到自己 |
 | `7` 的上傳警告 | 只有「native code 沒附 debug symbols」—— 那是 ML Kit 的 `.so`，**修不了也不用修** |
 | 支援裝置 | ✅ 一個都沒少（Phone 12,146 / Tablet 6,476 / TV 5，`no longer supported` 全 0） |
