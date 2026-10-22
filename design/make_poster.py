@@ -26,6 +26,9 @@ PAPER = (242, 239, 233)
 SIGNAL = (95, 210, 180)
 WARN = (232, 163, 61)
 
+# ✅ 2026-10-22 使用者實機掃過，確認導到正確的 opt-in 頁面。
+# （這是 Play 封閉測試的標準網址格式 —— 由套件名推得，不是從 Console 複製的，
+#  所以當初是「推測正確」而非「已知正確」。現在是已驗證的。）
 OPT_IN_URL = "https://play.google.com/apps/testing/com.heartchen.squat"
 FORM_URL = "forms.gle/ojAW5pGWAFeiK2bLA"
 

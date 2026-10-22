@@ -14,6 +14,9 @@ const {
   AlignmentType, WidthType, BorderStyle, VerticalAlign, HeightRule,
 } = require("docx");
 
+// QR 編碼的網址（兩個都已於 2026-10-22 實機掃碼確認）：
+//   opt-in https://play.google.com/apps/testing/com.heartchen.squat
+//   問卷   https://forms.gle/ojAW5pGWAFeiK2bLA
 const ROOT = path.resolve(__dirname, "..");
 const A = (f) => fs.readFileSync(path.join(ROOT, "design/assets", f));
 
