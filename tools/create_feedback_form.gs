@@ -62,6 +62,23 @@ function createFeedbackForm() {
     ])
     .setRequired(true);
 
+  // 「參與度不足」是 Play 明載的獨立退件理由，而這一題是唯一能無條件答出它的題目
+  // ——「請他們匯出 CSV」那一段是選填，不能假設拿得到。
+  form.addMultipleChoiceItem()
+    .setTitle('這 14 天裡，你大約打開來用過幾次？')
+    .setChoiceValues(['1~2 次', '3~5 次', '6~10 次', '超過 10 次'])
+    .setRequired(true);
+
+  // 對應「測試人員的使用情況是否與預期生產用戶的行為相符，**包括任何觀察到的差異**」。
+  // 這一題的價值在於讓答案可以誠實：目標受眾是長者，而湊數招募來的 12 人多半是
+  // 同學朋友 —— 那正是 Play 要你指出的差異。有這題才寫得出
+  // 「測試人員多為 20~39 歲，因此長者相關的可用性問題未能充分暴露」。
+  form.addMultipleChoiceItem()
+    .setTitle('你的年齡層')
+    .setHelpText('這題是為了說明「測試人員」與「目標使用者（長者）」的差距，不會識別個人')
+    .setChoiceValues(['20 歲以下', '20~39 歲', '40~59 歲', '60~74 歲', '75 歲以上'])
+    .setRequired(true);
+
   form.addMultipleChoiceItem()
     .setTitle('計次準不準？')
     .setChoiceValues([
