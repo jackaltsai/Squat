@@ -92,7 +92,7 @@ function groupHeading(tag, name) {
       new TableCell({
         width: { size: 9638, type: WidthType.DXA },
         columnSpan: 2,
-        margins: { top: 120, bottom: 40, left: 0, right: 0 },
+        margins: { top: 200, bottom: 40, left: 0, right: 0 },
         borders: noBorder(),
         children: [new Paragraph({
           children: [t(tag + "　" + name, { pt: 10.5, bold: true, color: TEAL, spacing: 20 })],
@@ -174,9 +174,11 @@ const doc = new Document({
       new Paragraph({
         children: [new ImageRun({
           type: "png", data: A("figure_squat_on_white.png"),
-          transformation: { width: 132, height: 132 },
+          transformation: { width: 156, height: 156 },
         })],
-        alignment: AlignmentType.CENTER, spacing: { after: 60 },
+        // ⚠️ after 不能太小。行內圖的行盒不會替下一段讓位，
+        // 第一版給 60 twips（3pt），渲染出來人偶的投影直接壓在「深蹲教練」上面。
+        alignment: AlignmentType.CENTER, spacing: { after: 240 },
       }),
       line(t("深蹲教練", { pt: 34, bold: true, spacing: 60 }), { after: 4 }),
       line(t("徵 15 位 Android 測試員", { pt: 17, bold: true, color: TEAL, spacing: 20 }),
@@ -189,13 +191,11 @@ const doc = new Document({
       line(t("App 沒有網路權限 — 不錄影、不上傳，做不到也不會做",
         { pt: 11, bold: true, color: TEAL }), { after: 10, rule: true }),
 
-      gap(6),
       steps,
-      gap(2),
       new Paragraph({
         children: [],
         border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 10, color: "D4D4D4" } },
-        spacing: { after: 100 },
+        spacing: { before: 200, after: 200 },
       }),
       qrs,
     ],
